@@ -1,14 +1,19 @@
-﻿import streamlit as st
+import streamlit as st
 import json
 from components.certificate import generate_pdf_certificate
 from utils import crypto_signer, hashing, db_client
 from models.document import DocumentModel
 
-st.set_page_config(page_title="TrustLens | Verify", page_icon="âœ…", layout="wide")
+st.set_page_config(page_title="TrustLens | Verify", page_icon="✅", layout="wide")
 
-st.title("âœ… Verify Document Integrity")
+st.title("✅ Verify Document Integrity")
+st.markdown("Anyone can verify a document's cryptographic provenance here. No login required.")
 
-doc_id = st.text_input("Enter Document ID to verify:", placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000")
+# Use query params to auto-fill doc_id if arriving via QR code link
+query_params = st.query_params
+initial_doc_id = query_params.get("doc_id", "")
+
+doc_id = st.text_input("Enter Document ID to verify:", value=initial_doc_id, placeholder="e.g. 550e8400-e29b-41d4-a716-446655440000")
 
 if st.button("Verify Provenance") and doc_id:
     with st.spinner("Fetching Immutable Record..."):
