@@ -9,20 +9,14 @@ import streamlit as st
 logger = logging.getLogger(__name__)
 
 # ── Safe Secrets Access ────────────────────────────────────────────────────────
-# Using a helper to avoid KeyError on different Streamlit versions
 def get_secret(key, default=None):
     try:
-        # Try Streamlit Secrets first
         return st.secrets[key]
     except (KeyError, FileNotFoundError, AttributeError, TypeError):
-        # Fallback to Environment Variables
         return os.getenv(key, default)
 
 SUPABASE_URL = get_secret("SUPABASE_URL")
 SUPABASE_KEY = get_secret("SUPABASE_KEY")
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    logger.error("Missing Supabase credentials. Ensure Streamlit Secrets or .env are configured.")
 
 # Initialize Supabase Client
 try:
@@ -83,3 +77,25 @@ def get_document_by_id(doc_id: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"Error fetching document by ID {doc_id}: {e}")
         return None
+
+def delete_document_record(doc_id: str, image_url: Optional[str] = None) -> bool:
+    """Deletes a document record and its associated storage file."""
+    if not supabase: return False
+    try:
+        # 1. Delete from database
+        supabase.table("documents").delete().eq("id", doc_id).execute()
+        
+        # 2. Attempt to delete from storage if URL is provided
+        if image_url:
+            try:
+                # Extract path from URL (e.g., documents/user_id/uuid_name.jpg)
+                path = image_url.split("/storage/v1/object/public/documents/")[-1]
+                supabase.storage.from_("documents").remove([path])
+            except:
+                pass # Storage deletion is secondary
+        
+        logger.info(f"Successfully deleted document: {doc_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error deleting document {doc_id}: {e}")
+        return False

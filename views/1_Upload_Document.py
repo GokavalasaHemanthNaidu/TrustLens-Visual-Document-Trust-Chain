@@ -36,13 +36,20 @@ with st.sidebar:
 st.title("📤 Secure New Document")
 st.markdown("Secure a document to the Trust Chain by uploading or linking.")
 
-# New: Document Type Selector
+# 1. Document Type Selector
 doc_type_choice = st.selectbox(
     "Select Document Category:",
     ["Aadhaar Card", "PAN Card", "Passport", "Resume / CV", "Invoice / Receipt", "Other Certificate"],
     index=4,
-    help="This helps in organizing and searching your vault later."
+    help="Select 'Other' to provide a custom name."
 )
+
+# 2. Custom Category Input (Only if 'Other' selected)
+final_doc_type = doc_type_choice
+if doc_type_choice == "Other Certificate":
+    custom_type = st.text_input("Enter Custom Document Type:", placeholder="e.g. Birth Certificate, Degree, etc.")
+    if custom_type:
+        final_doc_type = custom_type
 
 tab_file, tab_link = st.tabs(["📁 Local File", "🔗 Public Link"])
 
@@ -79,8 +86,8 @@ if processed_images:
             raw_text = ocr_processor.process_image(img)
             extracted = ocr_processor.extract_fields(raw_text)
             
-            # Manual Type Overwrite
-            extracted["doc_type"] = doc_type_choice
+            # Save the final category (either selected or custom)
+            extracted["doc_type"] = final_doc_type
             
             # Fallback for Name
             if not extracted.get("name"):
@@ -107,7 +114,7 @@ if processed_images:
                     content_hash=content_hash, digital_signature=sig, did_public_key=pub
                 )
                 db_client.save_document_record(doc_model)
-                st.success(f"✅ Secured! [{doc_type_choice}] — {extracted.get('name')}")
+                st.success(f"✅ Secured! [{final_doc_type}] — {extracted.get('name')}")
             
             progress.progress(100, text="Success!")
             time.sleep(0.5)

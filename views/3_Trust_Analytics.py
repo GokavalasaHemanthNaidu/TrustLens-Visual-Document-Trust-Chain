@@ -14,18 +14,21 @@ with st.sidebar:
     st.markdown(f"<h2 style='color:#3B82F6;margin-bottom:0'>🛡️ {APP_NAME}</h2>", unsafe_allow_html=True)
     user = st.session_state.user
     st.markdown(f"**👤** `{user.email}`")
+    if st.button("📤 Secure New Document", use_container_width=True):
+        st.switch_page("views/1_Upload_Document.py")
     st.divider()
     st.caption(f"{APP_VERSION}")
 
 # ── Page Content ────────────────────────────────────────────────────────────────
 st.title("📊 My Secure Vault")
-st.markdown("Search and inspect your anchored documents.")
+st.markdown("View, search, and manage your anchored documents.")
 
-with st.spinner("Loading ledger..."):
+# Fetch documents
+with st.spinner("Accessing ledger..."):
     docs = db_client.get_user_documents(user.id)
 
 if not docs:
-    st.info("📭 Vault is empty.")
+    st.info("📭 Your vault is empty. Secure your first document to see it here!")
     st.stop()
 
 # ── Audit Log Table ────────────────────────────────────────────────────────────
@@ -37,10 +40,10 @@ for doc in docs:
     table_data.append({
         "ID":                doc["id"][:8] + "...",
         "Date":              doc["created_at"][:10],
-        "Category":          ex.get("doc_type", "Document"), # New field
+        "Category":          ex.get("doc_type", "Document"),
         "Name":              ex.get("name", "—"),
         "Reference ID":      ex.get("document_id", "—"),
-        "Full_ID":           doc["id"] # Hidden for selection
+        "Full_ID":           doc["id"]
     })
 
 df = pd.DataFrame(table_data)
@@ -51,32 +54,56 @@ if search:
 
 st.dataframe(df.drop(columns=["Full_ID"]), use_container_width=True, hide_index=True)
 
-# ── Vault Viewer ───────────────────────────────────────────────────────────────
+# ── Document Inspector & Delete Logic ──────────────────────────────────────────
 st.divider()
 st.markdown("### 🖼️ Document Inspector")
-selected_row = st.selectbox("Select document to inspect:", options=df["Full_ID"].tolist(), 
-                            format_func=lambda x: f"{df[df['Full_ID']==x]['Category'].values[0]} | {df[df['Full_ID']==x]['Name'].values[0]} ({df[df['Full_ID']==x]['Date'].values[0]})")
 
-if selected_row:
-    # Find doc by full ID
-    selected_doc = next(d for d in docs if d["id"] == selected_row)
+# Formatter for the dropdown
+def doc_label(doc_id):
+    row = df[df["Full_ID"] == doc_id].iloc[0]
+    return f"[{row['Category']}] {row['Name']} — {row['Date']}"
+
+selected_doc_id = st.selectbox("Select document to inspect or manage:", 
+                               options=df["Full_ID"].tolist(), 
+                               format_func=doc_label)
+
+if selected_doc_id:
+    # Find full doc object
+    selected_doc = next(d for d in docs if d["id"] == selected_doc_id)
     ex = selected_doc.get("extracted_fields", {}) or {}
     
     with st.container(border=True):
         c1, c2 = st.columns([1, 1.2])
         with c1:
-            st.image(selected_doc["image_url"], use_column_width=True)
-            st.link_button("🔗 Open Original Image", selected_doc["image_url"], use_container_width=True)
+            st.image(selected_doc["image_url"], use_column_width=True, caption="Original Anchor")
+            st.link_button("🔗 Open Full Image", selected_doc["image_url"], use_container_width=True)
         with c2:
             st.markdown(f"#### 📄 {ex.get('doc_type', 'Document')} Details")
-            st.markdown(f"**Subject:** {ex.get('name', '—')}")
+            st.markdown(f"**Name:** `{ex.get('name', '—')}`")
             st.markdown(f"**Ref ID:** `{ex.get('document_id', '—')}`")
+            st.markdown(f"**Ledger ID:** `{selected_doc['id']}`")
             st.markdown(f"**Secured On:** {selected_doc['created_at'][:19]}")
+            
             st.divider()
-            st.caption("Cryptographic Hash")
-            st.code(selected_doc["content_hash"], language="text")
-            if st.button("✅ Run Verification Page", use_container_width=True):
-                st.switch_page("views/2_Verify_Document.py")
+            
+            # Action Buttons
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("✅ Verify Now", use_container_width=True, type="primary"):
+                    st.switch_page("views/2_Verify_Document.py")
+            with col_b:
+                # 🔴 Delete Operation
+                if st.button("🗑️ Delete Record", use_container_width=True):
+                    with st.spinner("Removing from ledger..."):
+                        success = db_client.delete_document_record(selected_doc["id"], selected_doc["image_url"])
+                        if success:
+                            st.success("Document deleted successfully!")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete document.")
+
+            st.caption("Warning: Deletion is permanent and removes the cryptographic proof from the ledger.")
 
 # ── Export ──────────────────────────────────────────────────────────────────────
 csv = df.to_csv(index=False).encode("utf-8")
