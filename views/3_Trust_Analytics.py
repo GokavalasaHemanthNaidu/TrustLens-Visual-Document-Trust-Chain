@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
+import time
 from utils import db_client
 from config import APP_VERSION, APP_NAME, GITHUB_URL, SUPPORT_EMAIL
 
@@ -60,8 +61,11 @@ st.markdown("### 🖼️ Document Inspector")
 
 # Formatter for the dropdown
 def doc_label(doc_id):
-    row = df[df["Full_ID"] == doc_id].iloc[0]
-    return f"[{row['Category']}] {row['Name']} — {row['Date']}"
+    try:
+        row = df[df["Full_ID"] == doc_id].iloc[0]
+        return f"[{row['Category']}] {row['Name']} — {row['Date']}"
+    except:
+        return "Unknown Document"
 
 selected_doc_id = st.selectbox("Select document to inspect or manage:", 
                                options=df["Full_ID"].tolist(), 
@@ -69,41 +73,44 @@ selected_doc_id = st.selectbox("Select document to inspect or manage:",
 
 if selected_doc_id:
     # Find full doc object
-    selected_doc = next(d for d in docs if d["id"] == selected_doc_id)
-    ex = selected_doc.get("extracted_fields", {}) or {}
-    
-    with st.container(border=True):
-        c1, c2 = st.columns([1, 1.2])
-        with c1:
-            st.image(selected_doc["image_url"], use_column_width=True, caption="Original Anchor")
-            st.link_button("🔗 Open Full Image", selected_doc["image_url"], use_container_width=True)
-        with c2:
-            st.markdown(f"#### 📄 {ex.get('doc_type', 'Document')} Details")
-            st.markdown(f"**Name:** `{ex.get('name', '—')}`")
-            st.markdown(f"**Ref ID:** `{ex.get('document_id', '—')}`")
-            st.markdown(f"**Ledger ID:** `{selected_doc['id']}`")
-            st.markdown(f"**Secured On:** {selected_doc['created_at'][:19]}")
-            
-            st.divider()
-            
-            # Action Buttons
-            col_a, col_b = st.columns(2)
-            with col_a:
-                if st.button("✅ Verify Now", use_container_width=True, type="primary"):
-                    st.switch_page("views/2_Verify_Document.py")
-            with col_b:
-                # 🔴 Delete Operation
-                if st.button("🗑️ Delete Record", use_container_width=True):
-                    with st.spinner("Removing from ledger..."):
-                        success = db_client.delete_document_record(selected_doc["id"], selected_doc["image_url"])
-                        if success:
-                            st.success("Document deleted successfully!")
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error("Failed to delete document.")
+    try:
+        selected_doc = next(d for d in docs if d["id"] == selected_doc_id)
+        ex = selected_doc.get("extracted_fields", {}) or {}
+        
+        with st.container(border=True):
+            c1, c2 = st.columns([1, 1.2])
+            with c1:
+                st.image(selected_doc["image_url"], use_column_width=True, caption="Original Anchor")
+                st.link_button("🔗 Open Full Image", selected_doc["image_url"], use_container_width=True)
+            with c2:
+                st.markdown(f"#### 📄 {ex.get('doc_type', 'Document')} Details")
+                st.markdown(f"**Name:** `{ex.get('name', '—')}`")
+                st.markdown(f"**Ref ID:** `{ex.get('document_id', '—')}`")
+                st.markdown(f"**Ledger ID:** `{selected_doc['id']}`")
+                st.markdown(f"**Secured On:** {selected_doc['created_at'][:19]}")
+                
+                st.divider()
+                
+                # Action Buttons
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    if st.button("✅ Verify Now", use_container_width=True, type="primary"):
+                        st.switch_page("views/2_Verify_Document.py")
+                with col_b:
+                    # 🔴 Delete Operation
+                    if st.button("🗑️ Delete Record", use_container_width=True):
+                        with st.spinner("Removing from ledger..."):
+                            success = db_client.delete_document_record(selected_doc["id"], selected_doc["image_url"])
+                            if success:
+                                st.success("Document deleted successfully!")
+                                time.sleep(1) # NOW DEFINED
+                                st.rerun()
+                            else:
+                                st.error("Failed to delete document.")
 
-            st.caption("Warning: Deletion is permanent and removes the cryptographic proof from the ledger.")
+                st.caption("Warning: Deletion is permanent and removes the cryptographic proof from the ledger.")
+    except Exception:
+        st.error("Document data no longer available.")
 
 # ── Export ──────────────────────────────────────────────────────────────────────
 csv = df.to_csv(index=False).encode("utf-8")
