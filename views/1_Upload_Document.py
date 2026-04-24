@@ -79,43 +79,46 @@ with tab_link:
 if processed_images:
     if st.button("🔐 Anchor to Trust Chain", type="primary", use_container_width=True):
         for img, name, bytes_data in processed_images:
-            st.markdown(f"---\n### ⚙️ Processing: `{name}`")
-            progress = st.progress(0, text="AI Scanning...")
+            status_container = st.empty()
+            with status_container.container():
+                st.markdown(f"---\n### ⚙️ Processing: `{name}`")
+                progress = st.progress(0, text="AI Scanning...")
 
-            # 1. AI Extraction
-            raw_text = ocr_processor.process_image(img)
-            extracted = ocr_processor.extract_fields(raw_text)
-            
-            # Save the final category (either selected or custom)
-            extracted["doc_type"] = final_doc_type
-            
-            # Fallback for Name
-            if not extracted.get("name"):
-                extracted["name"] = name.split(".")[0].replace("_", " ").title()
-            
-            # Ensure unique internal ID
-            if not extracted.get("document_id"):
-                extracted["document_id"] = "TRU-" + str(int(time.time()))[-5:]
+                # 1. AI Extraction
+                raw_text = ocr_processor.process_image(img)
+                extracted = ocr_processor.extract_fields(raw_text)
+                
+                # Save the final category (either selected or custom)
+                extracted["doc_type"] = final_doc_type
+                
+                # Fallback for Name
+                if not extracted.get("name"):
+                    extracted["name"] = name.split(".")[0].replace("_", " ").title()
+                
+                # Ensure unique internal ID
+                if not extracted.get("document_id"):
+                    extracted["document_id"] = "TRU-" + str(int(time.time()))[-5:]
 
-            # 2. Hashing
-            progress.progress(40, text="Hashing Data...")
-            content_hash = hashing.create_hash(extracted)
-            
-            # 3. Signing
-            progress.progress(70, text="Digital Signature...")
-            priv, pub = crypto_signer.generate_keypair()
-            sig = crypto_signer.sign_hash(content_hash, priv)
-            
-            # 4. Anchoring
-            image_url = db_client.upload_image_to_storage(user.id, bytes_data, name)
-            if image_url:
-                doc_model = DocumentModel(
-                    user_id=user.id, image_url=image_url, extracted_fields=extracted,
-                    content_hash=content_hash, digital_signature=sig, did_public_key=pub
-                )
-                db_client.save_document_record(doc_model)
-                st.success(f"✅ Secured! [{final_doc_type}] — {extracted.get('name')}")
-            
-            progress.progress(100, text="Success!")
-            time.sleep(0.5)
-            progress.empty()
+                # 2. Hashing
+                progress.progress(40, text="Hashing Data...")
+                content_hash = hashing.create_hash(extracted)
+                
+                # 3. Signing
+                progress.progress(70, text="Digital Signature...")
+                priv, pub = crypto_signer.generate_keypair()
+                sig = crypto_signer.sign_hash(content_hash, priv)
+                
+                # 4. Anchoring
+                image_url = db_client.upload_image_to_storage(user.id, bytes_data, name)
+                if image_url:
+                    doc_model = DocumentModel(
+                        user_id=user.id, image_url=image_url, extracted_fields=extracted,
+                        content_hash=content_hash, digital_signature=sig, did_public_key=pub
+                    )
+                    db_client.save_document_record(doc_model)
+                
+                progress.progress(100, text="Success!")
+                time.sleep(0.5)
+
+            status_container.empty()
+            st.success(f"✅ Secured! [{final_doc_type}] — {extracted.get('name')} (ID: {extracted.get('document_id')})")

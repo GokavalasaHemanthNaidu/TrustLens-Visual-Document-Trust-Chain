@@ -45,9 +45,15 @@ def extract_fields(text: str) -> Dict[str, Any]:
             break
 
     # 3. ID Patterns
-    id_match = re.search(r'(?i)(?:Invoice No|ID|Aadhaar|Reg|No)[:\s]*([A-Za-z0-9-]+)', text)
-    if id_match:
-        fields['document_id'] = id_match.group(1).strip()
+    id_patterns = [
+        r'(?i)(?:Invoice No|ID|Aadhaar|Reg|No\.?|Number|Roll|PAN|Voter|License)[\s\:\-]+([A-Za-z0-9-]+)',
+        r'(?i)\b(?:ID)\s*([A-Za-z0-9-]+)\b'
+    ]
+    for p in id_patterns:
+        m = re.search(p, text)
+        if m:
+            fields['document_id'] = m.group(1).strip()
+            break
 
     # 4. Date Patterns
     date_match = re.search(r'(?i)(?:Date)[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})', text)
