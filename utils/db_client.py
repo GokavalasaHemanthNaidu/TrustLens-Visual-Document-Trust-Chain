@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import uuid
 import logging
@@ -7,31 +8,35 @@ import streamlit as st
 
 logger = logging.getLogger(__name__)
 
-# Fallback to os.getenv if st.secrets is not available (e.g. basic local run)
-try:
-    SUPABASE_URL = st.secrets.get("SUPABASE_URL", os.getenv("SUPABASE_URL"))
-    SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", os.getenv("SUPABASE_KEY"))
-except FileNotFoundError:
-    SUPABASE_URL = os.getenv("SUPABASE_URL")
-    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+# ── Safe Secrets Access ────────────────────────────────────────────────────────
+# Using a helper to avoid KeyError on different Streamlit versions
+def get_secret(key, default=None):
+    try:
+        # Try Streamlit Secrets first
+        return st.secrets[key]
+    except (KeyError, FileNotFoundError, AttributeError, TypeError):
+        # Fallback to Environment Variables
+        return os.getenv(key, default)
+
+SUPABASE_URL = get_secret("SUPABASE_URL")
+SUPABASE_KEY = get_secret("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    logger.error("Missing Supabase credentials. Ensure .streamlit/secrets.toml or .env is configured.")
+    logger.error("Missing Supabase credentials. Ensure Streamlit Secrets or .env are configured.")
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
+# Initialize Supabase Client
+try:
+    if SUPABASE_URL and SUPABASE_KEY:
+        supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    else:
+        supabase = None
+except Exception as e:
+    logger.error(f"Failed to initialize Supabase client: {e}")
+    supabase = None
 
+# ── DB Functions ───────────────────────────────────────────────────────────────
 def upload_image_to_storage(user_id: str, file_bytes: bytes, file_name: str) -> Optional[str]:
-    """
-    Uploads an image to Supabase Storage and returns the public URL.
-    
-    Args:
-        user_id (str): The UUID of the authenticated user.
-        file_bytes (bytes): The raw bytes of the image file.
-        file_name (str): Original filename.
-        
-    Returns:
-        Optional[str]: The public URL of the uploaded image, or None if failed.
-    """
+    """Uploads an image to Supabase Storage and returns the public URL."""
     if not supabase: return None
     try:
         unique_filename = f"{user_id}/{uuid.uuid4()}_{file_name}"
@@ -41,27 +46,17 @@ def upload_image_to_storage(user_id: str, file_bytes: bytes, file_name: str) -> 
             file_options={"content-type": "image/jpeg"}
         )
         public_url = supabase.storage.from_('documents').get_public_url(unique_filename)
-        logger.info(f"Successfully uploaded image to storage: {public_url}")
         return public_url
     except Exception as e:
         logger.error(f"Error uploading image to storage: {e}")
         return None
 
 def save_document_record(document_model) -> Optional[Dict[str, Any]]:
-    """
-    Saves the document metadata and trust chain to the database.
-    
-    Args:
-        document_model (DocumentModel): The document data model.
-        
-    Returns:
-        Optional[Dict]: The inserted database record.
-    """
+    """Saves the document metadata and trust chain to the database."""
     if not supabase: return None
     try:
         data = document_model.to_dict()
         response = supabase.table("documents").insert(data).execute()
-        logger.info("Successfully saved document trust record to database.")
         return response.data
     except Exception as e:
         logger.error(f"Error saving document record: {e}")
