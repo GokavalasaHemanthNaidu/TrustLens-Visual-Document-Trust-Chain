@@ -24,7 +24,9 @@ def extract_fields(text: str) -> Dict[str, Any]:
 
     # 1. Name Patterns (Extended)
     name_patterns = [
-        r'(?i)(?:Name|Customer|Bill To|Billed To|Patient|User|Employee)[:\s]+([A-Za-z\s]+)(?:\n|$)',
+        # Use multiline to match 'Name' at the start of a line to avoid 'Father's Name'
+        r'(?im)^(?:Name|Student Name|Customer|Patient|User|Employee)[^\w\n]+([A-Za-z\s\.]+)(?:\n|$)',
+        r'(?i)(?:Name|Customer|Bill To|Billed To)[:\-\s]+([A-Za-z\s\.]+)(?:\n|$)',
         r'(?i)^([A-Z][a-z]+ [A-Z][a-z]+)' # Matches "John Doe" at the start of a line
     ]
     for p in name_patterns:
@@ -46,7 +48,8 @@ def extract_fields(text: str) -> Dict[str, Any]:
 
     # 3. ID Patterns
     id_patterns = [
-        r'(?i)(?:Invoice No|ID|Aadhaar|Reg|No\.?|Number|Roll|PAN|Voter|License)[\s\:\-]+([A-Za-z0-9-]+)',
+        r'(?i)(?:Roll\s*No|Invoice\s*No|ID\s*No|Reg\s*No|Aadhaar|PAN|Voter|License)[^\w\n]*([A-Za-z0-9-]+)',
+        r'(?i)(?:ID|No\.?|Number|Roll)[\s\:\-]+([A-Za-z0-9-]+)',
         r'(?i)\b(?:ID)\s*([A-Za-z0-9-]+)\b'
     ]
     for p in id_patterns:
@@ -55,8 +58,8 @@ def extract_fields(text: str) -> Dict[str, Any]:
             fields['document_id'] = m.group(1).strip()
             break
 
-    # 4. Date Patterns
-    date_match = re.search(r'(?i)(?:Date)[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})', text)
+    # 4. Date Patterns (DOB and Date)
+    date_match = re.search(r'(?i)(?:Date|D\.?O\.?B\.?)[^\w\n]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})', text)
     if date_match:
         fields['date'] = date_match.group(1).strip()
 
