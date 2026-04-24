@@ -1,7 +1,6 @@
 streamlit==1.33.0
 supabase==2.4.5
 pytesseract==0.3.10
-layoutparser[layoutmodels,tesseract]==0.3.4
 cryptography==42.0.5
 python-dotenv==1.0.1
 Pillow==10.3.0
