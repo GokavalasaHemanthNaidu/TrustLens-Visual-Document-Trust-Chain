@@ -7,19 +7,19 @@ from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
 from cryptography.hazmat.primitives import serialization
 
 def create_hash(content: dict) -> str:
-    \"\"\"
+    """
     Creates a SHA-256 hash of the extracted JSON content.
     Sorts keys to ensure consistent hashing.
-    \"\"\"
+    """
     # Sort keys to guarantee deterministic string representation
     content_str = json.dumps(content, sort_keys=True).encode('utf-8')
     return hashlib.sha256(content_str).hexdigest()
 
 def generate_keypair():
-    \"\"\"
+    """
     Generates an ECDSA keypair using the SECP256R1 curve.
     Returns standard PEM encoded strings for easy storage.
-    \"\"\"
+    """
     private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     
@@ -37,10 +37,10 @@ def generate_keypair():
     return private_pem, public_pem
 
 def sign_hash(content_hash: str, private_pem: str) -> str:
-    \"\"\"
+    """
     Signs a SHA256 hash using the provided ECDSA private key.
     Returns a Base64 encoded signature.
-    \"\"\"
+    """
     private_key = serialization.load_pem_private_key(
         private_pem.encode('utf-8'),
         password=None
@@ -59,9 +59,9 @@ def sign_hash(content_hash: str, private_pem: str) -> str:
     return base64.b64encode(signature).decode('utf-8')
 
 def verify_signature(content_hash: str, signature_b64: str, public_pem: str) -> bool:
-    \"\"\"
+    """
     Verifies that the given base64 signature matches the content hash and public key.
-    \"\"\"
+    """
     try:
         public_key = serialization.load_pem_public_key(
             public_pem.encode('utf-8')

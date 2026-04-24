@@ -15,7 +15,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def upload_image_to_storage(user_id: str, file_bytes: bytes, file_name: str) -> str:
-    \"\"\"Uploads an image to Supabase Storage and returns the public URL.\"\"\"
+    """Uploads an image to Supabase Storage and returns the public URL."""
     try:
         unique_filename = f"{user_id}/{uuid.uuid4()}_{file_name}"
         
@@ -34,7 +34,7 @@ def upload_image_to_storage(user_id: str, file_bytes: bytes, file_name: str) -> 
         return None
 
 def save_document_record(user_id: str, image_url: str, fields: dict, content_hash: str, signature: str, public_key: str):
-    \"\"\"Saves the document metadata and trust chain to the database.\"\"\"
+    """Saves the document metadata and trust chain to the database."""
     data = {
         "user_id": user_id,
         "image_url": image_url,
@@ -48,12 +48,12 @@ def save_document_record(user_id: str, image_url: str, fields: dict, content_has
     return response.data
 
 def get_user_documents(user_id: str):
-    \"\"\"Retrieves all documents for a specific user.\"\"\"
+    """Retrieves all documents for a specific user."""
     response = supabase.table("documents").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
     return response.data
 
 def get_document_by_id(doc_id: str):
-    \"\"\"Retrieves a single document by its ID for public verification.\"\"\"
+    """Retrieves a single document by its ID for public verification."""
     try:
         response = supabase.table("documents").select("*").eq("id", doc_id).execute()
         if response.data and len(response.data) > 0:
