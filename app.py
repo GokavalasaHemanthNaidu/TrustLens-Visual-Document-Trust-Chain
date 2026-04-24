@@ -205,7 +205,8 @@ elif st.session_state.page == 'upload':
                     st.markdown("**Cryptographic Proof:**")
                     st.markdown(f"**SHA256 Hash:** <div class='hash-box'>{content_hash}</div>", unsafe_allow_html=True)
                     st.markdown(f"**ECDSA Signature:** <div class='hash-box'>{signature}</div>", unsafe_allow_html=True)
-                    pub_key_str = public_pem.split('\\n')[1][:40]
+                    pub_key_lines = public_pem.strip().split('\n')
+                    pub_key_str = pub_key_lines[1][:40] if len(pub_key_lines) > 1 else public_pem[:40]
                     st.markdown(f"**DID Public Key:** <div class='hash-box'>{pub_key_str}...</div>", unsafe_allow_html=True)
                 
                 if record and len(record) > 0:
