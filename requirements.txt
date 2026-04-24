@@ -8,3 +8,6 @@ opencv-python-headless>=4.8.0
 qrcode[pil]>=7.4.2
 fpdf2>=2.7.5
 altair>=5.0.0
+validators>=0.22.0
+requests>=2.31.0
+pandas>=2.1.0
