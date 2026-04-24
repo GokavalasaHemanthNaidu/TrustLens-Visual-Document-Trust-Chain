@@ -4,14 +4,11 @@ import numpy as np
 import re
 from PIL import Image
 
-# Attempt to load layout parser, fallback gracefully if detectron2 isn't installed properly
+model = None
+
 try:
     import layoutparser as lp
     LP_AVAILABLE = True
-    # Initialize model (can be slow on first run, ideally we cache this)
-    # Using a lightweight model or skipping initialization until called
-    # To prevent app crash on boot if model download fails.
-    model = None 
 except ImportError:
     LP_AVAILABLE = False
     print("WARNING: layoutparser or its dependencies (detectron2) not available. Falling back to pure pytesseract.")
