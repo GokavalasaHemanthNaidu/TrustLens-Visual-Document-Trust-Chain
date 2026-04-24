@@ -26,6 +26,16 @@ def sign_in(email: str, password: str) -> Tuple[Optional[Any], Optional[str]]:
         logger.error(f"Sign in error for {email}: {e}")
         return None, str(e)
 
+def reset_password(email: str) -> Tuple[bool, str]:
+    """Send a password reset email via Supabase."""
+    if not supabase: return False, "Supabase client not initialized"
+    try:
+        supabase.auth.reset_password_email(email)
+        return True, ""
+    except Exception as e:
+        logger.error(f"Password reset failed: {str(e)}")
+        return False, str(e)
+
 def sign_out() -> Tuple[bool, Optional[str]]:
     """Logs out the current user."""
     if not supabase: return False, "Supabase client not initialized"
