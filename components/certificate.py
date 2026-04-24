@@ -1,4 +1,4 @@
-﻿import os
+# -*- coding: utf-8 -*-
 import qrcode
 from io import BytesIO
 from fpdf import FPDF
@@ -6,81 +6,128 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class TrustCertificate(FPDF):
     def header(self):
         self.set_font("helvetica", "B", 20)
-        self.cell(0, 15, "Visual Document Trust Certificate", align="C", ln=True)
+        self.cell(0, 15, "Visual Document Trust Certificate", align="C", new_x="LMARGIN", new_y="NEXT")
         self.set_font("helvetica", "I", 12)
-        self.cell(0, 10, "Cryptographically Secured Provenance", align="C", ln=True)
-        self.ln(10)
+        self.set_text_color(60, 60, 60)
+        self.cell(0, 10, "Cryptographically Secured Provenance | TrustLens v1.5.0", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.set_text_color(0, 0, 0)
+        self.line(10, self.get_y(), 200, self.get_y())
+        self.ln(8)
 
     def footer(self):
         self.set_y(-15)
         self.set_font("helvetica", "I", 8)
-        self.cell(0, 10, f"Page {self.page_no()}", align="C")
+        self.set_text_color(120, 120, 120)
+        self.cell(0, 10, f"TrustLens Immutable Ledger | Page {self.page_no()} | Verify at: trustlens-visual-document-trust-chain.streamlit.app", align="C")
+
 
 def generate_pdf_certificate(doc_model, verification_url: str) -> bytes:
     """
-    Generates a PDF certificate containing the document's trust parameters and a QR code.
-    
+    Generates a PDF trust certificate with QR code using in-memory buffers only
+    (no disk writes — safe for Streamlit Cloud read-only filesystem).
+
     Args:
-        doc_model: The DocumentModel instance containing the data.
-        verification_url: The URL to the public verification page.
-        
+        doc_model: The DocumentModel instance.
+        verification_url: URL to the public verification page.
+
     Returns:
-        bytes: The raw PDF bytes for download.
+        bytes: Raw PDF bytes ready for st.download_button.
     """
     try:
         pdf = TrustCertificate()
         pdf.add_page()
-        
-        # Details
-        pdf.set_font("helvetica", "B", 12)
-        pdf.cell(0, 10, "Document Details:", ln=True)
+
+        # ── Document Details Section ─────────────────────────────────────────
+        pdf.set_fill_color(240, 245, 255)
+        pdf.set_font("helvetica", "B", 13)
+        pdf.cell(0, 10, "Document Details", new_x="LMARGIN", new_y="NEXT", fill=True)
         pdf.set_font("helvetica", "", 10)
-        
-        for k, v in doc_model.extracted_fields.items():
-            pdf.cell(50, 8, f"{k.title()}:")
-            pdf.cell(0, 8, str(v), ln=True)
-        
-        pdf.ln(10)
-        
-        # Cryptography
-        pdf.set_font("helvetica", "B", 12)
-        pdf.cell(0, 10, "Cryptographic Anchors:", ln=True)
-        
+
+        extracted = doc_model.extracted_fields or {}
+        if extracted:
+            for k, v in extracted.items():
+                pdf.set_font("helvetica", "B", 10)
+                pdf.cell(55, 8, f"{k.replace('_', ' ').title()}:")
+                pdf.set_font("helvetica", "", 10)
+                pdf.cell(0, 8, str(v), new_x="LMARGIN", new_y="NEXT")
+        else:
+            pdf.set_text_color(150, 150, 150)
+            pdf.cell(0, 8, "No structured fields were extracted from this document.", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_text_color(0, 0, 0)
+
+        pdf.ln(6)
+
+        # ── Anchoring Metadata ───────────────────────────────────────────────
+        pdf.set_fill_color(240, 255, 245)
+        pdf.set_font("helvetica", "B", 13)
+        pdf.cell(0, 10, "Anchoring Metadata", new_x="LMARGIN", new_y="NEXT", fill=True)
         pdf.set_font("helvetica", "B", 10)
-        pdf.cell(0, 8, "SHA-256 Content Hash:", ln=True)
+        pdf.cell(55, 8, "Document ID:")
         pdf.set_font("courier", "", 9)
-        pdf.multi_cell(0, 6, doc_model.content_hash)
-        
+        pdf.cell(0, 8, str(doc_model.id), new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("helvetica", "B", 10)
-        pdf.cell(0, 8, "ECDSA SECP256R1 Signature:", ln=True)
+        pdf.cell(55, 8, "Anchored On:")
         pdf.set_font("courier", "", 9)
-        pdf.multi_cell(0, 6, doc_model.digital_signature)
-        
-        pdf.ln(10)
-        
-        # QR Code Generation
-        qr = qrcode.QRCode(box_size=4, border=2)
+        pdf.cell(0, 8, str(doc_model.created_at)[:19] if doc_model.created_at else "N/A", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(6)
+
+        # ── Cryptographic Anchors ────────────────────────────────────────────
+        pdf.set_fill_color(255, 250, 240)
+        pdf.set_font("helvetica", "B", 13)
+        pdf.cell(0, 10, "Cryptographic Anchors", new_x="LMARGIN", new_y="NEXT", fill=True)
+
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(0, 8, "SHA-256 Content Hash:", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("courier", "", 9)
+        pdf.set_fill_color(245, 245, 245)
+        pdf.multi_cell(0, 6, doc_model.content_hash, fill=True)
+        pdf.ln(4)
+
+        pdf.set_font("helvetica", "B", 10)
+        pdf.cell(0, 8, "ECDSA SECP256R1 Digital Signature:", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("courier", "", 8)
+        # Truncate long signature for readability
+        sig_display = doc_model.digital_signature[:120] + "…" if len(doc_model.digital_signature) > 120 else doc_model.digital_signature
+        pdf.multi_cell(0, 6, sig_display, fill=True)
+        pdf.ln(8)
+
+        # ── QR Code (in-memory, no disk write) ──────────────────────────────
+        qr = qrcode.QRCode(box_size=4, border=2, error_correction=qrcode.constants.ERROR_CORRECT_M)
         qr.add_data(verification_url)
         qr.make(fit=True)
         qr_img = qr.make_image(fill_color="black", back_color="white")
-        
-        # Save QR to temp memory and embed
-        qr_path = "temp_qr.png"
-        qr_img.save(qr_path)
-        pdf.image(qr_path, x=150, y=pdf.get_y(), w=40)
-        os.remove(qr_path)
-        
-        # Verification Note
+        qr_buffer = BytesIO()
+        qr_img.save(qr_buffer, format="PNG")
+        qr_buffer.seek(0)
+
+        # Embed QR from memory buffer
+        y_before_qr = pdf.get_y()
+        pdf.image(qr_buffer, x=155, y=y_before_qr, w=40)
+
+        # ── Verification note beside QR ───────────────────────────────────────
+        pdf.set_xy(10, y_before_qr)
         pdf.set_font("helvetica", "I", 10)
         pdf.set_text_color(0, 100, 0)
-        pdf.multi_cell(130, 6, "Scan the QR code or visit the verification link to independently audit this document's integrity against the DID public key.")
-        
-        pdf_bytes = pdf.output(dest='S')
-        logger.info("Successfully generated PDF verification certificate.")
+        pdf.multi_cell(
+            140, 6,
+            "Scan the QR code or visit the verification URL to independently audit this document's "
+            "cryptographic integrity. This certificate was generated by TrustLens and is tamper-evident."
+        )
+        pdf.ln(4)
+        pdf.set_font("courier", "", 8)
+        pdf.set_text_color(80, 80, 80)
+        pdf.multi_cell(140, 5, f"Verify URL: {verification_url}")
+
+        # ── Return as bytes (fpdf2 returns bytearray; convert for Streamlit) ─
+        raw = pdf.output()
+        pdf_bytes = bytes(raw)
+        logger.info(f"Generated PDF certificate ({len(pdf_bytes)} bytes).")
         return pdf_bytes
+
     except Exception as e:
-        logger.error(f"Error generating PDF certificate: {e}")
+        logger.error(f"Error generating PDF certificate: {e}", exc_info=True)
         return b""
