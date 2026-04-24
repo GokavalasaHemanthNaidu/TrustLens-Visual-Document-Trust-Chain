@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import time
+import requests
+import validators
 from PIL import Image
 from io import BytesIO
 from utils import ocr_processor, hashing, crypto_signer, db_client
@@ -17,93 +19,86 @@ with st.sidebar:
     st.markdown(f"<h2 style='color:#3B82F6;margin-bottom:0'>🛡️ {APP_NAME}</h2>", unsafe_allow_html=True)
     user = st.session_state.user
     st.markdown(f"**👤** `{user.email}`")
-    st.markdown("🟢 **Active Session**")
+    if st.button("📊 My Vault", use_container_width=True):
+        st.switch_page("views/3_Trust_Analytics.py")
     st.divider()
-    with st.expander("ℹ️ Upload Help", expanded=False):
-        st.markdown(f"""
-- Accepted: **PNG, JPG, JPEG** · Max **200 MB**
-- AI OCR scans for Name, Date, Amount, Invoice No
-- SHA-256 hash generated from extracted fields
-- Signed with ECDSA SECP256R1 private key
-- Anchored to Supabase immutable ledger
-
-📧 [{SUPPORT_EMAIL}](mailto:{SUPPORT_EMAIL})
-        """)
     st.caption(f"{APP_VERSION}")
 
 # ── Page Content ───────────────────────────────────────────────────────────────
-st.title("📤 Secure Document Upload")
-st.markdown("Upload documents to extract, hash, and anchor them onto the Trust Chain.")
+st.title("📤 Secure New Document")
+st.markdown("Secure an image by uploading a file or providing a public link.")
 
-uploaded_files = st.file_uploader(
-    "Drag and drop documents here",
-    type=["png", "jpg", "jpeg"],
-    accept_multiple_files=True,
-    help="200 MB per file · PNG, JPG, JPEG",
-    key="upload_files",
-)
+tab_file, tab_link = st.tabs(["📁 Local File", "🔗 Public Link (Drive/Web)"])
 
-if uploaded_files:
-    if st.button("🔐 Anchor to Trust Chain", type="primary", use_container_width=True, key="btn_anchor"):
-        for uploaded_file in uploaded_files:
-            file_bytes = uploaded_file.getvalue()
-            if len(file_bytes) > 200 * 1024 * 1024:
-                st.error(f"❌ {uploaded_file.name} exceeds the 200 MB limit.")
-                continue
+processed_images = [] # List of (image, filename) tuples
 
-            st.markdown(f"---\n### ⚙️ Processing: `{uploaded_file.name}`")
-            progress = st.progress(0, text="Starting…")
+with tab_file:
+    uploaded_files = st.file_uploader(
+        "Choose images...", type=["png", "jpg", "jpeg"], accept_multiple_files=True
+    )
+    if uploaded_files:
+        for f in uploaded_files:
+            processed_images.append((Image.open(f), f.name, f.getvalue()))
 
-            # Phase 1: OCR
-            progress.progress(15, text="Phase 1: AI Extraction — scanning document…")
-            image = Image.open(BytesIO(file_bytes))
-            raw_text = ocr_processor.process_image(image)
-            extracted_fields = ocr_processor.extract_fields(raw_text)
-            time.sleep(0.4)
+with tab_link:
+    st.info("💡 Ensure the link is direct (ends in .jpg/.png) or a shared Google Drive link.")
+    url = st.text_input("Paste Image URL:", placeholder="https://example.com/document.jpg")
+    if url and st.button("📥 Fetch from Link"):
+        if not validators.url(url):
+            st.error("Invalid URL format.")
+        else:
+            try:
+                with st.spinner("Downloading image..."):
+                    resp = requests.get(url, timeout=10)
+                    resp.raise_for_status()
+                    img = Image.open(BytesIO(resp.content))
+                    processed_images.append((img, url.split("/")[-1] or "remote_doc.jpg", resp.content))
+                    st.success("Image fetched successfully!")
+            except Exception as e:
+                st.error(f"Failed to fetch image: {e}")
 
-            # Phase 2: Hashing
-            progress.progress(40, text="Phase 2: Deterministic Hashing — generating SHA-256…")
-            content_hash = hashing.create_hash(extracted_fields)
-            time.sleep(0.4)
+if processed_images:
+    if st.button("🔐 Anchor to Trust Chain", type="primary", use_container_width=True):
+        for img, name, bytes_data in processed_images:
+            st.markdown(f"---\n### ⚙️ Processing: `{name}`")
+            progress = st.progress(0, text="Starting...")
 
-            # Phase 3: Signing
-            progress.progress(65, text="Phase 3: Digital Signature — applying ECDSA keypair…")
-            private_pem, public_pem = crypto_signer.generate_keypair()
-            signature = crypto_signer.sign_hash(content_hash, private_pem)
-            time.sleep(0.4)
+            # 1. AI Extraction
+            progress.progress(20, text="AI: Extracting text & patterns...")
+            raw_text = ocr_processor.process_image(img)
+            extracted = ocr_processor.extract_fields(raw_text)
+            
+            # Fallback: If AI finds nothing (like in a photo), use the filename
+            if not any(extracted.values()):
+                extracted["name"] = name.split(".")[0].replace("_", " ").title()
+                extracted["document_id"] = "GEN-" + str(int(time.time()))[-6:]
 
-            # Phase 4: Anchoring
-            progress.progress(85, text="Phase 4: Ledger Anchoring — uploading to encrypted storage…")
-            image_url = db_client.upload_image_to_storage(
-                st.session_state.user.id, file_bytes, uploaded_file.name
-            )
+            # 2. Hashing
+            progress.progress(50, text="Crypto: Generating SHA-256 fingerprint...")
+            content_hash = hashing.create_hash(extracted)
+            
+            # 3. Signing
+            progress.progress(80, text="Identity: Signing with ECDSA SECP256R1...")
+            priv, pub = crypto_signer.generate_keypair()
+            sig = crypto_signer.sign_hash(content_hash, priv)
+            
+            # 4. Anchoring
+            image_url = db_client.upload_image_to_storage(user.id, bytes_data, name)
             if image_url:
                 doc_model = DocumentModel(
-                    user_id=st.session_state.user.id,
-                    image_url=image_url,
-                    extracted_fields=extracted_fields,
-                    content_hash=content_hash,
-                    digital_signature=signature,
-                    did_public_key=public_pem,
+                    user_id=user.id, image_url=image_url, extracted_fields=extracted,
+                    content_hash=content_hash, digital_signature=sig, did_public_key=pub
                 )
                 db_client.save_document_record(doc_model)
-
-            progress.progress(100, text="✅ Complete!")
-            time.sleep(0.3)
+                st.success(f"✅ Secured! Name: **{extracted.get('name')}**")
+            
+            progress.progress(100, text="Complete!")
+            time.sleep(0.5)
             progress.empty()
-
-            st.success(f"✅ **{uploaded_file.name}** secured on the Trust Chain!")
-            c1, c2 = st.columns([1, 2])
-            with c1:
-                st.image(image, caption=uploaded_file.name, use_column_width=True)
-            with c2:
-                st.markdown("**Extracted Fields:**")
-                st.json(extracted_fields if extracted_fields else {"status": "No fields extracted — check OCR"})
-                st.code(f"SHA-256: {content_hash}", language="text")
 
 # ── Footer ──────────────────────────────────────────────────────────────────────
 st.markdown(
     f"<div style='text-align:center;color:#6c757d;font-size:12px;margin-top:40px;border-top:1px solid #2d3748;padding-top:16px'>"
-    f"© 2026 {APP_NAME} | <a href='{GITHUB_URL}' target='_blank'>GitHub Repo</a> | {APP_VERSION}</div>",
+    f"© 2026 {APP_NAME} | {APP_VERSION}</div>",
     unsafe_allow_html=True,
 )
