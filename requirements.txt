@@ -6,3 +6,6 @@ python-dotenv
 Pillow
 opencv-python-headless
 qrcode[pil]
+fpdf2
+altair
+pytest

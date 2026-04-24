@@ -1,62 +1,64 @@
-# Visual Document Trust Chain 🔗
+# TrustLens - Visual Document Trust Chain 🔐
 
-A complete, production-ready final year CSE project that acts as a Digital Notary. It takes a photo document (like an Aadhaar card or Invoice), extracts the text using AI OCR (Tesseract + LayoutParser), hashes the content, and cryptographically signs it to create a verifiable, untampered Digital Identity (DID) standard credential.
+![Streamlit](https://img.shields.io/badge/Streamlit-1.33-FF4B4B.svg?style=flat&logo=streamlit)
+![Python](https://img.shields.io/badge/Python-3.9+-blue.svg?style=flat&logo=python)
+![Cryptography](https://img.shields.io/badge/Security-ECDSA_SECP256R1-green.svg)
 
-## Features
+TrustLens is a production-grade digital notary and immutable provenance engine. It uses AI (OCR) to extract physical document data, hashes it deterministically (SHA-256), and cryptographically signs it using ECDSA. The resulting Trust Chain is anchored into Supabase, allowing anyone to verify a document's integrity globally with zero-knowledge proofs.
 
-* **Authentication:** Secure user login via Supabase.
-* **AI OCR Engine:** Uses PyTesseract and LayoutParser for intelligent document parsing.
-* **Trust Chain (Cryptography):** Generates SHA-256 hashes and ECDSA digital signatures to guarantee document integrity.
-* **Digital Identity (DID):** Employs standard Elliptic Curve cryptography to anchor public keys to documents.
-* **Public Verification:** Share a document ID to mathematically prove it hasn't been altered.
-* **Cloud Storage:** Images and structured JSON data are stored immutably in Supabase PostgreSQL.
+## 🌟 Live Demo
+**[Launch TrustLens on Streamlit Community Cloud](https://trustlens-visual-document-trust-chain.streamlit.app)**
 
----
+## 🏗️ Architecture
 
-## Local Setup Instructions
+```text
+trustlens/
+├── app.py                 # Multi-Page Router & Login
+├── components/            # UI widgets (Upload Zone, Certificate, Provenance Chart)
+├── utils/                 # Business Logic
+│   ├── hashing.py         # Deterministic JSON SHA-256
+│   ├── ocr_processor.py   # AI Text Extraction
+│   ├── crypto_signer.py   # ECDSA Keypair & Signatures
+│   └── db_client.py       # Supabase Database/Storage
+├── models/                # Document Data Models (Dataclasses)
+├── pages/                 # Streamlit Native Routing Pages
+├── tests/                 # Pytest Verification Suites
+└── .streamlit/            # Deep Blue / Emerald Theme Configuration
+```
 
-### 1. Prerequisites
-- **Python 3.9+** installed on your system.
-- **Tesseract OCR Engine:**
-  - **Windows:** Download the installer from [UB-Mannheim/tesseract/wiki](https://github.com/UB-Mannheim/tesseract/wiki). Install it, and ensure `C:\\Program Files\\Tesseract-OCR` is added to your System PATH environment variable.
-  - **Mac/Linux:** Use `brew install tesseract` or `sudo apt-get install tesseract-ocr`.
+## ✨ Core Features
+- **Batch Processing:** Upload multiple documents simultaneously.
+- **Visual Provenance:** Interactive lifecycle timeline charting.
+- **Verification Certificates:** Downloadable PDF certificates with embedded QR codes linking to public validation.
+- **Trust Analytics:** Searchable immutable audit logs with CSV export capabilities.
+- **Zero-Knowledge Verification:** Recalculates hashes and validates ECDSA signatures mathematically entirely in-browser.
 
-### 2. Installation
-Clone the project, open a terminal, and install the required Python packages:
+## 🚀 Local Installation
 
+1. **Clone the repository**
+```bash
+git clone https://github.com/GokavalasaHemanthNaidu/TrustLens-Visual-Document-Trust-Chain.git
+cd TrustLens-Visual-Document-Trust-Chain
+```
+
+2. **Install dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Environment Variables
-Create a `.env` file in the root directory and add your Supabase credentials (this project is already pre-configured with yours):
-
-```env
-SUPABASE_URL=https://[your-project-id].supabase.co
-SUPABASE_KEY=[your-anon-key]
+3. **Configure Secrets**
+Create a `.streamlit/secrets.toml` file (or `.env`):
+```toml
+SUPABASE_URL = "https://your-project.supabase.co"
+SUPABASE_KEY = "your-anon-key"
 ```
 
-### 4. Run the Application
-Start the Streamlit development server:
-
+4. **Run the Application**
 ```bash
 streamlit run app.py
 ```
-The app will open automatically in your browser at `http://localhost:8501`.
 
----
-
-## Hugging Face Spaces Deployment
-
-Deploying this app globally for free is incredibly easy using Hugging Face Spaces:
-
-1. Go to [Hugging Face Spaces](https://huggingface.co/spaces) and create an account.
-2. Click **Create new Space**.
-3. **Space Name:** `Visual-Document-Trust-Chain`
-4. **License:** MIT
-5. **Select the Space SDK:** Choose **Streamlit**.
-6. **Space Hardware:** Select the Free Tier (CPU). 
-7. Click **Create Space**.
-8. In the Space settings, go to **Settings -> Variables and secrets**. Add your `SUPABASE_URL` and `SUPABASE_KEY` as Secrets.
-9. Finally, upload all the files from this folder (`app.py`, `requirements.txt`, `modules/`, etc.) directly into the Hugging Face Space repository. 
-10. Hugging Face will automatically build and deploy your app. It will run 24/7 globally for your professors to see!
+## 🛡️ Security Notes
+- This application uses strict `st.session_state` management to prevent Cross-Tab leakage.
+- Max file upload size is hard-capped at 5MB to prevent DoS attacks on the OCR engine.
+- Supabase requires **Leaked Password Protection** and properly configured **Storage RLS Policies (INSERT allowed)**.
