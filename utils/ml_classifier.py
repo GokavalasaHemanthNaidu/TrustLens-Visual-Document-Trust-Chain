@@ -151,11 +151,14 @@ def _keyword_classify(text: str) -> Tuple[str, float]:
     tl = text.lower()
     for keywords, label in _KEYWORD_RULES:
         hits = sum(1 for kw in keywords if kw in tl)
-        if hits >= 2:
-            conf = min(60 + hits * 8, 88)
-            return label, float(conf)
-        if hits == 1 and len(keywords) == 1:
-            return label, 70.0
+        if hits > 0:
+            # For highly specific labels, 1 hit is enough
+            if label in ["10th Marksheet", "12th Marksheet", "Semester Grade Card", "Aadhaar Card", "PAN Card", "Passport", "Voter ID", "Driving License", "Identity Card", "Admit Card"]:
+                return label, min(75.0 + hits * 5, 92.0)
+            # For generic labels, require 2 hits or if the rule only has 1 keyword
+            if hits >= 2 or len(keywords) == 1:
+                conf = min(60 + hits * 8, 88)
+                return label, float(conf)
     return "Document", 40.0
 
 
@@ -163,19 +166,26 @@ def _keyword_classify(text: str) -> Tuple[str, float]:
 # LAYER 4 — Dynamic NER-style field extraction (doc-type-aware)
 # ══════════════════════════════════════════════════════════════════════════════
 def _extract_name(text: str) -> Tuple[str, float]:
+    # CRITICAL FIX: Filter out lines with Father/Mother/Spouse to avoid misidentification
+    clean_lines = []
+    for line in text.split('\n'):
+        if not re.search(r'(?i)(father|mother|spouse|s/o|d/o|w/o|guardian)', line):
+            clean_lines.append(line)
+    clean_text = '\n'.join(clean_lines)
+
     patterns = [
         r'(?im)^(?:Name|Student Name|Applicant|Customer|Patient|Employee)'
         r'[^a-zA-Z\n]{0,5}([A-Za-z][A-Za-z\s\.]{2,40})$',
         r'(?i)(?:Name|Surname(?:\s*/\s*Given Name)?)[\s:\-]+([A-Z][A-Za-z\s\.]{2,35})',
     ]
     for p in patterns:
-        m = re.search(p, text)
+        m = re.search(p, clean_text)
         if m:
             val = m.group(1).strip()
             if len(val.split()) >= 2:
                 return val.title(), 88.0
     # ALL-CAPS line fallback (Aadhaar style)
-    m = re.search(r'\n([A-Z]{2}[A-Z\s]{3,30})\n', text)
+    m = re.search(r'\n([A-Z]{2}[A-Z\s]{3,30})\n', clean_text)
     if m:
         skip = {"GOVERNMENT OF INDIA", "INCOME TAX DEPARTMENT",
                 "ELECTION COMMISSION", "UNIQUE IDENTIFICATION",

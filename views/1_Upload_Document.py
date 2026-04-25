@@ -158,29 +158,15 @@ if processed_images:
   <table style='width:100%;border-collapse:collapse;font-size:13px'>
     <tr>
       <td style='padding:4px 8px;color:#9CA3AF'>🙍 Name</td>
-      <td style='padding:4px 8px;color:white;font-weight:600'>
-        {entities.get('name',{}).get('value','—')}
-        <span style='color:#6B7280;font-size:11px'>
-          ({entities.get('name',{}).get('confidence',0):.0f}% conf)
-        </span>
-      </td>
+      <td style='padding:4px 8px;color:white;font-weight:600'>{entities.get('name',{}).get('value') or '—'} <span style='color:#6B7280;font-size:11px'>({entities.get('name',{}).get('confidence',0):.0f}% conf)</span></td>
       <td style='padding:4px 8px;color:#9CA3AF'>🆔 Ref ID</td>
-      <td style='padding:4px 8px;color:white;font-weight:600'>
-        {entities.get('document_id',{}).get('value','—')}
-        <span style='color:#6B7280;font-size:11px'>
-          ({entities.get('document_id',{}).get('confidence',0):.0f}% conf)
-        </span>
-      </td>
+      <td style='padding:4px 8px;color:white;font-weight:600'>{entities.get('document_id',{}).get('value') or '—'} <span style='color:#6B7280;font-size:11px'>({entities.get('document_id',{}).get('confidence',0):.0f}% conf)</span></td>
     </tr>
     <tr>
       <td style='padding:4px 8px;color:#9CA3AF'>📅 Date / DOB</td>
-      <td style='padding:4px 8px;color:white'>
-        {entities.get('date',{}).get('value','—')}
-      </td>
+      <td style='padding:4px 8px;color:white'>{entities.get('date',{}).get('value') or '—'}</td>
       <td style='padding:4px 8px;color:#9CA3AF'>💰 Amount</td>
-      <td style='padding:4px 8px;color:white'>
-        {entities.get('amount',{}).get('value','—') or '—'}
-      </td>
+      <td style='padding:4px 8px;color:white'>{entities.get('amount',{}).get('value') or '—'}</td>
     </tr>
   </table>
 </div>
