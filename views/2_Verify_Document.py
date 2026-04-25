@@ -77,41 +77,49 @@ elif selected_type == "all":
 else:
     placeholder = f"Enter Name, ID, or any detail from the {selected_type}..."
 
-search_query = st.text_input(
-    "Search detail:",
-    placeholder=placeholder,
-    key="universal_search",
-    label_visibility="collapsed"
-)
+# ── Search Form (Enter key works!) ──────────────────────────────────────────
+with st.form(key="verify_form", border=False):
+    search_query = st.text_input(
+        "Search detail:",
+        placeholder=placeholder,
+        key="universal_search",
+        label_visibility="collapsed"
+    )
+    submitted = st.form_submit_button(
+        "🔍 Verify Now",
+        type="primary",
+        use_container_width=True
+    )
 
-if st.button("🔍 Verify Now", type="primary", use_container_width=True):
+if submitted:
     if not search_query.strip():
-        st.warning("Please enter a search term.")
+        st.warning("⚠️ Please enter a name, ID, or any detail to search.")
         st.stop()
 
     with st.spinner("🔎 Searching the immutable Trust Chain ledger..."):
         doc_record = None
-        search_term = search_query.strip()
+        # Always lowercase the search term to ensure case-insensitive matching
+        search_term = search_query.strip().lower()
 
-        # Step 1: Direct UUID match
+        # Step 1: Direct UUID match (case-sensitive for UUIDs)
         try:
             if len(search_term) >= 32:
-                doc_record = db_client.get_document_by_id(search_term)
+                doc_record = db_client.get_document_by_id(search_query.strip())
         except Exception:
             pass
 
-        # Step 2: Exact DB search — filtered by selected doc type
+        # Step 2: DB search — ilike handles case insensitivity natively in PostgreSQL
         if not doc_record:
             try:
                 query = db_client.supabase.table("documents").select("*")
 
                 # Apply type filter if not "All Documents"
                 if selected_type != "all":
-                    query = query.ilike(
-                        "extracted_fields->>doc_type", f"%{selected_type}%"
+                    query = query.filter(
+                        "extracted_fields->>doc_type", "ilike", f"%{selected_type}%"
                     )
 
-                # Apply field search
+                # Search across all name/id fields (ilike = case-insensitive LIKE)
                 res = query.or_(
                     f"extracted_fields->>name.ilike.%{search_term}%,"
                     f"extracted_fields->>document_id.ilike.%{search_term}%,"
