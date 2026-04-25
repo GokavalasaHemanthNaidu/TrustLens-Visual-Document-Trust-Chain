@@ -11,3 +11,4 @@ altair>=5.0.0
 validators>=0.22.0
 requests>=2.31.0
 pandas>=2.1.0
+graphviz>=0.20.1
