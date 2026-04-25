@@ -36,7 +36,7 @@ DOC_TYPES = [
     ("📘 Passport",            "Passport"),
     ("🗳️ Voter ID",           "Voter ID"),
     ("🚗 Driving License",     "Driving License"),
-    ("🎓 College / School ID", "Identity Card"),
+    ("🎓 College / School ID", "id card"),
     ("📜 Certificate",         "Certificate"),
     ("🧾 Invoice / Receipt",   "Invoice / Receipt"),
     ("📊 Marksheet / Result",  "Marksheet / Result"),
@@ -114,9 +114,21 @@ if submitted:
                 query = db_client.supabase.table("documents").select("*")
 
                 # Apply type filter if not "All Documents"
-                if selected_type != "all":
+                # Use broader keyword so variations like 'College ID Card'
+                # and 'Identity Card' both match when user picks College/School ID
+                TYPE_KEYWORDS = {
+                    "id card":        "id",        # College ID, Identity Card, ID Card
+                    "Invoice / Receipt": "invoice",
+                    "Marksheet / Result": "marksheet",
+                    "Bank Statement":    "bank",
+                    "Resume / CV":       "resume",
+                    "Legal Document":    "legal",
+                    "Document":          "",        # Other — no filter
+                }
+                filter_kw = TYPE_KEYWORDS.get(selected_type, selected_type)
+                if selected_type != "all" and filter_kw:
                     query = query.filter(
-                        "extracted_fields->>doc_type", "ilike", f"%{selected_type}%"
+                        "extracted_fields->>doc_type", "ilike", f"%{filter_kw}%"
                     )
 
                 # Search across all name/id fields (ilike = case-insensitive LIKE)
