@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 DONUT_API  = "https://api-inference.huggingface.co/models/naver-clova-ix/donut-base-finetuned-docvqa"
 # CORD receipt model (good for invoices)
 CORD_API   = "https://api-inference.huggingface.co/models/naver-clova-ix/donut-base-finetuned-cord-v2"
-# Indian ID classifier (YOLO-based)
-ID_API     = "https://api-inference.huggingface.co/models/logasanjeev/indian-id-validator"
+# Custom trained model (LayoutLMv3 fine-tuned)
+ID_API     = "https://api-inference.huggingface.co/models/hemanthnaidug/my-trustlens-model"
 
 def _get_hf_token() -> str:
     try:
