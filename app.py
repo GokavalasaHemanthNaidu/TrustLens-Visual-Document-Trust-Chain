@@ -109,26 +109,37 @@ def render_sidebar():
         )
         st.divider()
 
-        if st.session_state.user:
-            user = st.session_state.user
+        # Always re-read user from session_state fresh
+        user = st.session_state.get("user")
+
+        if user:
             u_color = get_user_color(user.email)
+            initial = user.email[0].upper()
             st.markdown(
                 f"<div style='background:{u_color};border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.1)'>"
                 f"<div style='display:flex;align-items:center;gap:12px'>"
-                f"<div style='width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-weight:800'>{user.email[0].upper()}</div>"
-                f"<div><div style='font-weight:600;font-size:13px;color:white'>{user.email}</div><div style='font-size:10px;opacity:0.8'>🟢 Secure Session</div></div>"
+                f"<div style='width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:white'>{initial}</div>"
+                f"<div><div style='font-weight:700;font-size:14px;color:white'>{user.email}</div>"
+                f"<div style='font-size:11px;opacity:0.85;color:white'>🟢 Secure Session Active</div></div>"
                 f"</div></div>",
                 unsafe_allow_html=True,
             )
-            
-            if st.button("📂 My Documents", use_container_width=True):
+            st.markdown("**Navigate:**")
+            if st.button("🏠 Home", use_container_width=True):
+                st.switch_page("app.py")
+            if st.button("📤 Secure Upload", use_container_width=True):
+                st.switch_page("views/1_Upload_Document.py")
+            if st.button("🔍 Verify Document", use_container_width=True):
+                st.switch_page("views/2_Verify_Document.py")
+            if st.button("📊 My Vault", use_container_width=True):
                 st.switch_page("views/3_Trust_Analytics.py")
+            st.divider()
             if st.button("🔓 Logout", use_container_width=True, type="primary"):
                 auth.sign_out()
                 st.session_state.user = None
                 st.rerun()
         else:
-            st.info("🔐 Access your secure vault.")
+            st.info("🔐 Login to access your secure vault.")
 
         st.divider()
         st.caption(f"© 2026 {APP_NAME} · {APP_VERSION}")
@@ -139,7 +150,7 @@ def login_page():
     st.markdown("<h1 style='text-align:center;color:#3B82F6'>🛡️ TrustLens</h1>", unsafe_allow_html=True)
     _, col, _ = st.columns([1, 2, 1])
     with col:
-        tab1, tab2 = st.tabs(["🔐 Login", "✏️ Sign Up"])
+        tab1, tab2, tab3 = st.tabs(["🔐 Login", "✏️ Sign Up", "🔑 Forgot Password"])
         with tab1:
             e = st.text_input("Email")
             p = st.text_input("Password", type="password")
@@ -157,6 +168,18 @@ def login_page():
                 res, err = auth.sign_up(se, sp)
                 if not err: st.success("Verify your email!")
                 else: st.error(err)
+        with tab3:
+            st.info("Enter your email to receive a secure password reset link.")
+            fe = st.text_input("Account Email", key="fe")
+            if st.button("Send Reset Link", type="primary", use_container_width=True):
+                if not fe:
+                    st.warning("Please enter your email.")
+                else:
+                    success, err = auth.reset_password(fe)
+                    if success:
+                        st.success("✅ Reset link sent! Please check your inbox.")
+                    else:
+                        st.error(err)
 
 def home_dashboard():
     render_sidebar()
