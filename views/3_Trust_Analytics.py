@@ -14,7 +14,17 @@ if "user" not in st.session_state or st.session_state.user is None:
 with st.sidebar:
     st.markdown(f"<h2 style='color:#3B82F6;margin-bottom:0'>🛡️ {APP_NAME}</h2>", unsafe_allow_html=True)
     user = st.session_state.user
-    st.markdown(f"**👤** `{user.email}`")
+    st.markdown(f"""
+    <div style='background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%);
+                padding: 15px; border-radius: 10px; margin-bottom: 20px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.3); text-align: center;'>
+        <div style='font-size: 32px; margin-bottom: 5px;'>👨‍🎓</div>
+        <div style='color: white; font-weight: bold; font-size: 15px; word-break: break-all;'>
+            {user.email.split('@')[0].replace('.', ' ').title()}
+        </div>
+        <div style='color: #93C5FD; font-size: 12px; margin-top: 3px;'>Verified Account</div>
+    </div>
+    """, unsafe_allow_html=True)
     if st.button("📤 Secure New Document", use_container_width=True):
         st.switch_page("views/1_Upload_Document.py")
     st.divider()

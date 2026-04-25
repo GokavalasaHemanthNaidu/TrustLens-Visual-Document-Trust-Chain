@@ -10,7 +10,18 @@ from config import APP_VERSION, APP_NAME, GITHUB_URL, SUPPORT_EMAIL
 with st.sidebar:
     st.markdown(f"<h2 style='color:#3B82F6;margin-bottom:0'>🛡️ {APP_NAME}</h2>", unsafe_allow_html=True)
     if st.session_state.get("user"):
-        st.markdown(f"**👤** `{st.session_state.user.email}`")
+        user = st.session_state.user
+        st.markdown(f"""
+        <div style='background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%);
+                    padding: 15px; border-radius: 10px; margin-bottom: 20px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.3); text-align: center;'>
+            <div style='font-size: 32px; margin-bottom: 5px;'>👨‍🎓</div>
+            <div style='color: white; font-weight: bold; font-size: 15px; word-break: break-all;'>
+                {user.email.split('@')[0].replace('.', ' ').title()}
+            </div>
+            <div style='color: #93C5FD; font-size: 12px; margin-top: 3px;'>Verified Account</div>
+        </div>
+        """, unsafe_allow_html=True)
         if st.button("📊 Go to My Vault", use_container_width=True):
             st.switch_page("views/3_Trust_Analytics.py")
         if st.button("📤 Upload Document", use_container_width=True):
