@@ -22,22 +22,66 @@ with st.sidebar:
 
 # ── Page Content ────────────────────────────────────────────────────────────────
 st.title("🔍 Universal Document Verification")
+st.markdown("Verify any document instantly. Select the type first, then enter any identifying detail.")
 
-st.markdown("""
-<div style='background:rgba(59,130,246,0.08);border:1px solid #3B82F6;border-radius:10px;padding:14px;margin-bottom:16px'>
-<strong>Search by ANY of the following:</strong><br>
-📌 <b>Ledger ID</b> (the full UUID) &nbsp;|&nbsp;
-🙍 <b>Person's Name</b> (e.g. <i>Hemanth Naidu</i>) &nbsp;|&nbsp;
-🆔 <b>Ref ID / Roll No</b> (e.g. <i>2253002</i>) &nbsp;|&nbsp;
-📂 <b>Category</b> (e.g. <i>Aadhaar Card</i>) &nbsp;|&nbsp;
-🔗 <b>Image URL</b>
-</div>
-""", unsafe_allow_html=True)
+st.divider()
+
+# ── STEP 1: Document Type Selector ────────────────────────────────────────────
+st.markdown("#### Step 1 — What type of document do you want to verify?")
+
+DOC_TYPES = [
+    ("🔍 All Documents",       "all"),
+    ("🪪 Aadhaar Card",        "Aadhaar Card"),
+    ("💳 PAN Card",            "PAN Card"),
+    ("📘 Passport",            "Passport"),
+    ("🗳️ Voter ID",           "Voter ID"),
+    ("🚗 Driving License",     "Driving License"),
+    ("🎓 College / School ID", "Identity Card"),
+    ("📜 Certificate",         "Certificate"),
+    ("🧾 Invoice / Receipt",   "Invoice / Receipt"),
+    ("📊 Marksheet / Result",  "Marksheet / Result"),
+    ("🏦 Bank Statement",      "Bank Statement"),
+    ("📄 Resume / CV",         "Resume / CV"),
+    ("📑 Legal Document",      "Legal Document"),
+    ("📋 Other",               "Document"),
+]
+
+cols = st.columns(4)
+doc_labels  = [d[0] for d in DOC_TYPES]
+doc_values  = [d[1] for d in DOC_TYPES]
+
+selected_type_label = st.radio(
+    "Select document category:",
+    options=doc_labels,
+    horizontal=True,
+    index=0,
+    key="doc_type_filter",
+    label_visibility="collapsed"
+)
+selected_type = doc_values[doc_labels.index(selected_type_label)]
+
+st.divider()
+
+# ── STEP 2: Search Input ───────────────────────────────────────────────────────
+st.markdown("#### Step 2 — Enter any identifying detail")
+
+# Dynamic placeholder based on selected type
+if selected_type == "Aadhaar Card":
+    placeholder = "Enter Name OR 12-digit Aadhaar Number..."
+elif selected_type == "PAN Card":
+    placeholder = "Enter Name OR PAN number (e.g. ABCDE1234F)..."
+elif selected_type == "Passport":
+    placeholder = "Enter Name OR Passport number (e.g. P1234567)..."
+elif selected_type == "all":
+    placeholder = "Enter Name, ID, Category, URL — search everything..."
+else:
+    placeholder = f"Enter Name, ID, or any detail from the {selected_type}..."
 
 search_query = st.text_input(
-    "Enter any detail to search:",
-    placeholder="Try: Hemanth Naidu   OR   2253002   OR   COLLEGE ID CARD ...",
-    key="universal_search"
+    "Search detail:",
+    placeholder=placeholder,
+    key="universal_search",
+    label_visibility="collapsed"
 )
 
 if st.button("🔍 Verify Now", type="primary", use_container_width=True):
@@ -56,27 +100,42 @@ if st.button("🔍 Verify Now", type="primary", use_container_width=True):
         except Exception:
             pass
 
-        # Step 2: Exact DB search across all extracted fields
+        # Step 2: Exact DB search — filtered by selected doc type
         if not doc_record:
             try:
-                res = db_client.supabase.table("documents").select("*").or_(
+                query = db_client.supabase.table("documents").select("*")
+
+                # Apply type filter if not "All Documents"
+                if selected_type != "all":
+                    query = query.ilike(
+                        "extracted_fields->>doc_type", f"%{selected_type}%"
+                    )
+
+                # Apply field search
+                res = query.or_(
                     f"extracted_fields->>name.ilike.%{search_term}%,"
                     f"extracted_fields->>document_id.ilike.%{search_term}%,"
                     f"extracted_fields->>doc_type.ilike.%{search_term}%,"
                     f"extracted_fields->>address.ilike.%{search_term}%,"
                     f"image_url.ilike.%{search_term}%"
                 ).execute()
+
                 if res.data:
                     doc_record = res.data[0]
             except Exception as e:
                 st.error(f"Search error: {e}")
                 st.stop()
 
-        # Step 3: Fuzzy search fallback (find closest match)
+        # Step 3: Fuzzy search fallback (respects type filter)
         if not doc_record:
             try:
                 import difflib
-                all_docs = db_client.supabase.table("documents").select("*").execute()
+                all_query = db_client.supabase.table("documents").select("*")
+                if selected_type != "all":
+                    all_query = all_query.ilike(
+                        "extracted_fields->>doc_type", f"%{selected_type}%"
+                    )
+                all_docs = all_query.execute()
                 best_ratio = 0.0
                 best_doc   = None
                 for d in (all_docs.data or []):
