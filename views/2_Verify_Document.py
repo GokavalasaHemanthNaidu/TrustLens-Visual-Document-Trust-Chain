@@ -49,27 +49,56 @@ if st.button("🔍 Verify Now", type="primary", use_container_width=True):
         doc_record = None
         search_term = search_query.strip()
 
-        # Step 1: Try direct UUID match
+        # Step 1: Direct UUID match
         try:
             if len(search_term) >= 32:
                 doc_record = db_client.get_document_by_id(search_term)
-        except:
+        except Exception:
             pass
 
-        # Step 2: Search by extracted fields AND URL
+        # Step 2: Exact DB search across all extracted fields
         if not doc_record:
             try:
                 res = db_client.supabase.table("documents").select("*").or_(
                     f"extracted_fields->>name.ilike.%{search_term}%,"
                     f"extracted_fields->>document_id.ilike.%{search_term}%,"
                     f"extracted_fields->>doc_type.ilike.%{search_term}%,"
+                    f"extracted_fields->>address.ilike.%{search_term}%,"
                     f"image_url.ilike.%{search_term}%"
                 ).execute()
                 if res.data:
                     doc_record = res.data[0]
-            except Exception as search_err:
-                st.error(f"Search error: {search_err}")
+            except Exception as e:
+                st.error(f"Search error: {e}")
                 st.stop()
+
+        # Step 3: Fuzzy search fallback (find closest match)
+        if not doc_record:
+            try:
+                import difflib
+                all_docs = db_client.supabase.table("documents").select("*").execute()
+                best_ratio = 0.0
+                best_doc   = None
+                for d in (all_docs.data or []):
+                    ex = d.get("extracted_fields") or {}
+                    candidates = [
+                        ex.get("name", ""),
+                        ex.get("document_id", ""),
+                        ex.get("doc_type", ""),
+                    ]
+                    for cand in candidates:
+                        if not cand: continue
+                        ratio = difflib.SequenceMatcher(
+                            None, search_term.lower(), cand.lower()
+                        ).ratio()
+                        if ratio > best_ratio:
+                            best_ratio = ratio
+                            best_doc   = d
+                if best_ratio >= 0.6:
+                    doc_record = best_doc
+                    st.info(f"🔍 Fuzzy match found (similarity: {best_ratio*100:.0f}%)")
+            except Exception:
+                pass
 
     # ── RESULT DISPLAY ─────────────────────────────────────────────────────────
     if not doc_record:
