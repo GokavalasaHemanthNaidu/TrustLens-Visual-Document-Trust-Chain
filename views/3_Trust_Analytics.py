@@ -96,14 +96,23 @@ selected_docs = [d for d in docs if st.session_state.get(f"select_{d['id']}", Fa
 with col_d:
     if selected_docs:
         if st.button(f"🗑️ Delete Selected ({len(selected_docs)})", type="primary", use_container_width=True):
-            with st.spinner("Erasing from immutable ledger..."):
-                for doc_to_delete in selected_docs:
-                    db_client.delete_document_record(doc_to_delete["id"], doc_to_delete["image_url"])
-                    # Clean up state
-                    st.session_state.pop(f"select_{doc_to_delete['id']}", None)
-            st.success(f"Deleted {len(selected_docs)} documents!")
-            time.sleep(1)
-            st.rerun()
+            with st.expander("⚠️ Confirm Bulk Deletion", expanded=True):
+                if st.button("Confirm Deletion", use_container_width=True):
+                    with st.spinner("Erasing from immutable ledger..."):
+                        successes = 0
+                        for doc_to_delete in selected_docs:
+                            try:
+                                if db_client.delete_document_record(doc_to_delete["id"], doc_to_delete["image_url"]):
+                                    successes += 1
+                                    st.session_state.pop(f"select_{doc_to_delete['id']}", None)
+                            except Exception as e:
+                                st.error(f"Error deleting {doc_to_delete['id']}: {e}")
+                    if successes:
+                        st.success(f"Deleted {successes} documents!")
+                    else:
+                        st.warning("No documents were deleted.")
+                    time.sleep(1)
+                    st.experimental_rerun()
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -137,6 +146,17 @@ for idx, doc in enumerate(docs):
                     st.switch_page("views/2_Verify_Document.py")
             with c3:
                 if st.button("🗑️", key=f"del_{doc_id}", use_container_width=True, help="Delete"):
+                    with st.expander("⚠️ Confirm Delete", expanded=True):
+                        if st.button("Confirm Delete", key=f"confirm_{doc_id}", use_container_width=True):
+                            try:
+                                if db_client.delete_document_record(doc_id, doc["image_url"]):
+                                    st.success("Document deleted.")
+                                    st.session_state.pop(f"select_{doc_id}", None)
+                                    st.experimental_rerun()
+                                else:
+                                    st.error("Deletion failed on server.")
+                            except Exception as e:
+                                st.error(f"Error during deletion: {e}")
                     db_client.delete_document_record(doc_id, doc["image_url"])
                     st.session_state.pop(f"select_{doc_id}", None)
                     st.rerun()
