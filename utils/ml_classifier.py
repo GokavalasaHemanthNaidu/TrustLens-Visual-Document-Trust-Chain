@@ -234,15 +234,26 @@ def _extract_id(text: str, doc_type: str) -> Tuple[str, float]:
             return m.group(1).replace(" ", ""), conf
     return "", 0.0
 
-def _extract_date(text: str) -> Tuple[str, float]:
-    m = re.search(
-        r'(?i)(?:D\.?O\.?B\.?|Date\s*of\s*Birth|Born|Date|Valid\s*Till)'
-        r'[^\d]{0,8}(\d{2}[/\-]\d{2}[/\-]\d{4}|\d{4}[/\-]\d{2}[/\-]\d{2})',
-        text
-    )
-    if m:
-        return m.group(1), 85.0
-    return "", 0.0
+def _extract_dates(text: str) -> Dict[str, Tuple[str, float]]:
+    dates = {"dob": ("", 0.0), "date_of_issue": ("", 0.0), "validity": ("", 0.0)}
+    # DOB
+    m_dob = re.search(r'(?i)(?:D\.?O\.?B\.?|Date\s*of\s*Birth|Born)[^\d]{0,8}(\d{2}[/\-]\d{2}[/\-]\d{4}|\d{4}[/\-]\d{2}[/\-]\d{2})', text)
+    if m_dob: dates["dob"] = (m_dob.group(1), 85.0)
+    
+    # Date of Issue / Dated
+    m_issue = re.search(r'(?i)(?:Date\s*of\s*Issue|Issued?\s*On|Dated?)[^\d]{0,8}(\d{2}[/\-]\d{2}[/\-]\d{4}|\d{4}[/\-]\d{2}[/\-]\d{2})', text)
+    if m_issue: dates["date_of_issue"] = (m_issue.group(1), 80.0)
+    
+    # Validity
+    m_val = re.search(r'(?i)(?:Valid\s*(?:Till|Thru|Until)|Expiry\s*Date)[^\d]{0,8}(\d{2}[/\-]\d{2}[/\-]\d{4}|\d{4}[/\-]\d{2}[/\-]\d{2})', text)
+    if m_val: dates["validity"] = (m_val.group(1), 80.0)
+    
+    # Fallback generic Date if issue isn't found
+    if not dates["date_of_issue"][0]:
+        m_gen = re.search(r'(?i)(?:Date)[^\d]{0,8}(\d{2}[/\-]\d{2}[/\-]\d{4}|\d{4}[/\-]\d{2}[/\-]\d{2})', text)
+        if m_gen: dates["date_of_issue"] = (m_gen.group(1), 60.0)
+        
+    return dates
 
 def _extract_amount(text: str) -> Tuple[str, float]:
     m = re.search(
@@ -289,11 +300,13 @@ def analyze_document(image: Image.Image, filename: str = "") -> Dict[str, Any]:
         "confidence":    0.0,
         "ml_used":       False,
         "entities":      {
-            "name":        {"value": "", "confidence": 0.0},
-            "document_id": {"value": "", "confidence": 0.0},
-            "date":        {"value": "", "confidence": 0.0},
-            "amount":      {"value": "", "confidence": 0.0},
-            "address":     {"value": "", "confidence": 0.0},
+            "name":          {"value": "", "confidence": 0.0},
+            "document_id":   {"value": "", "confidence": 0.0},
+            "dob":           {"value": "", "confidence": 0.0},
+            "date_of_issue": {"value": "", "confidence": 0.0},
+            "validity":      {"value": "", "confidence": 0.0},
+            "amount":        {"value": "", "confidence": 0.0},
+            "address":       {"value": "", "confidence": 0.0},
         }
     }
 
@@ -329,7 +342,7 @@ def analyze_document(image: Image.Image, filename: str = "") -> Dict[str, Any]:
 
     # ── Stage 5: Dynamic entity extraction ────────────────────────────────
     id_val,   id_conf   = _extract_id(raw_text, result["document_type"])
-    date_val, date_conf = _extract_date(raw_text)
+    date_dict           = _extract_dates(raw_text)
     amt_val,  amt_conf  = _extract_amount(raw_text)
     addr_val, addr_conf = _extract_address(raw_text)
 
@@ -344,11 +357,13 @@ def analyze_document(image: Image.Image, filename: str = "") -> Dict[str, Any]:
 
     # ── Assemble output ────────────────────────────────────────────────────
     result["entities"] = {
-        "name":        {"value": name_val,  "confidence": name_conf},
-        "document_id": {"value": id_val,    "confidence": id_conf},
-        "date":        {"value": date_val,  "confidence": date_conf},
-        "amount":      {"value": amt_val,   "confidence": amt_conf},
-        "address":     {"value": addr_val,  "confidence": addr_conf},
+        "name":          {"value": name_val,  "confidence": name_conf},
+        "document_id":   {"value": id_val,    "confidence": id_conf},
+        "dob":           {"value": date_dict["dob"][0], "confidence": date_dict["dob"][1]},
+        "date_of_issue": {"value": date_dict["date_of_issue"][0], "confidence": date_dict["date_of_issue"][1]},
+        "validity":      {"value": date_dict["validity"][0], "confidence": date_dict["validity"][1]},
+        "amount":        {"value": amt_val,   "confidence": amt_conf},
+        "address":       {"value": addr_val,  "confidence": addr_conf},
     }
 
     return result
@@ -360,12 +375,15 @@ def flatten_for_db(result: Dict[str, Any], manual_override: str = "") -> Dict[st
     """
     e = result.get("entities", {})
     return {
-        "doc_type":    manual_override if manual_override else result.get("document_type", "Document"),
-        "name":        e.get("name",        {}).get("value", ""),
-        "document_id": e.get("document_id", {}).get("value", ""),
-        "date":        e.get("date",        {}).get("value", ""),
-        "amount":      e.get("amount",      {}).get("value", ""),
-        "address":     e.get("address",     {}).get("value", ""),
+        "doc_type":      manual_override if manual_override else result.get("document_type", "Document"),
+        "name":          e.get("name",          {}).get("value", ""),
+        "document_id":   e.get("document_id",   {}).get("value", ""),
+        "date":          e.get("date_of_issue", {}).get("value", "") or e.get("dob", {}).get("value", ""), # Legacy compat
+        "dob":           e.get("dob",           {}).get("value", ""),
+        "date_of_issue": e.get("date_of_issue", {}).get("value", ""),
+        "validity":      e.get("validity",      {}).get("value", ""),
+        "amount":        e.get("amount",        {}).get("value", ""),
+        "address":       e.get("address",       {}).get("value", ""),
         "ml_confidence": result.get("confidence", 0.0),
         "ml_used":       result.get("ml_used", False),
     }

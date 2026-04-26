@@ -28,6 +28,9 @@ with st.sidebar:
     if st.button("📤 Secure New Document", use_container_width=True):
         st.switch_page("views/1_Upload_Document.py")
     st.divider()
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
     st.caption(f"{APP_VERSION}")
 
 # ── Page Content ────────────────────────────────────────────────────────────────
@@ -65,62 +68,68 @@ if search:
 
 st.dataframe(df.drop(columns=["Full_ID"]), use_container_width=True, hide_index=True)
 
-# ── Document Inspector & Delete Logic ──────────────────────────────────────────
+# ── Bulk Management ──────────────────────────────────────────────────────────────
 st.divider()
-st.markdown("### 🖼️ Document Inspector")
+st.markdown("### 🗃️ Bulk Management")
+st.caption("Select documents below to perform bulk actions.")
 
-# Formatter for the dropdown
-def doc_label(doc_id):
-    try:
-        row = df[df["Full_ID"] == doc_id].iloc[0]
-        return f"[{row['Category']}] {row['Name']} — {row['Date']}"
-    except:
-        return "Unknown Document"
+# Add a boolean 'Select' column for bulk actions
+df_bulk = df.copy()
+df_bulk.insert(0, "Select", False)
 
-selected_doc_id = st.selectbox("Select document to inspect or manage:", 
-                               options=df["Full_ID"].tolist(), 
-                               format_func=doc_label)
+edited_df = st.data_editor(
+    df_bulk,
+    column_config={"Select": st.column_config.CheckboxColumn("Select", help="Select rows to delete", default=False)},
+    hide_index=True,
+    disabled=["ID", "Date", "Category", "Name", "Reference ID", "Full_ID"],
+    use_container_width=True
+)
 
-if selected_doc_id:
-    # Find full doc object
-    try:
-        selected_doc = next(d for d in docs if d["id"] == selected_doc_id)
-        ex = selected_doc.get("extracted_fields", {}) or {}
-        
+selected_rows = edited_df[edited_df["Select"]]
+if not selected_rows.empty:
+    if st.button(f"🗑️ Delete Selected ({len(selected_rows)})", type="primary", use_container_width=True):
+        with st.spinner("Deleting selected documents from immutable ledger..."):
+            for _, row in selected_rows.iterrows():
+                doc_to_delete = next((d for d in docs if d["id"] == row["Full_ID"]), None)
+                if doc_to_delete:
+                    db_client.delete_document_record(doc_to_delete["id"], doc_to_delete["image_url"])
+            st.success(f"Successfully deleted {len(selected_rows)} documents.")
+            time.sleep(1)
+            st.rerun()
+
+# ── Document Gallery (Grid View) ───────────────────────────────────────────────
+st.divider()
+st.markdown("### 🖼️ Document Gallery")
+st.caption("View all secured documents at a glance.")
+
+# Create a 3-column grid
+cols = st.columns(3)
+for idx, doc in enumerate(docs):
+    ex = doc.get("extracted_fields", {}) or {}
+    with cols[idx % 3]:
         with st.container(border=True):
-            c1, c2 = st.columns([1, 1.2])
+            st.image(doc["image_url"], use_container_width=True)
+            st.markdown(f"**{ex.get('doc_type', 'Document')}**")
+            
+            # Show name and Ref ID cleanly
+            name_val = ex.get("name") or "—"
+            id_val = ex.get("document_id") or "—"
+            st.caption(f"**Name:** {name_val[:25] + '...' if len(name_val) > 25 else name_val}")
+            st.caption(f"**Ref ID:** {id_val}")
+            
+            st.markdown("<hr style='margin:10px 0'>", unsafe_allow_html=True)
+            
+            # Action Buttons per card
+            c1, c2, c3 = st.columns([1, 1, 1])
             with c1:
-                st.image(selected_doc["image_url"], use_column_width=True, caption="Original Anchor")
-                st.link_button("🔗 Open Full Image", selected_doc["image_url"], use_container_width=True)
+                st.link_button("🔗", doc["image_url"], use_container_width=True, help="View Original Image")
             with c2:
-                st.markdown(f"#### 📄 {ex.get('doc_type', 'Document')} Details")
-                st.markdown(f"**Name:** `{ex.get('name', '—')}`")
-                st.markdown(f"**Ref ID:** `{ex.get('document_id', '—')}`")
-                st.markdown(f"**Ledger ID:** `{selected_doc['id']}`")
-                st.markdown(f"**Secured On:** {selected_doc['created_at'][:19]}")
-                
-                st.divider()
-                
-                # Action Buttons
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    if st.button("✅ Verify Now", use_container_width=True, type="primary"):
-                        st.switch_page("views/2_Verify_Document.py")
-                with col_b:
-                    # 🔴 Delete Operation
-                    if st.button("🗑️ Delete Record", use_container_width=True):
-                        with st.spinner("Removing from ledger..."):
-                            success = db_client.delete_document_record(selected_doc["id"], selected_doc["image_url"])
-                            if success:
-                                st.success("Document deleted successfully!")
-                                time.sleep(1) # NOW DEFINED
-                                st.rerun()
-                            else:
-                                st.error("Failed to delete document.")
-
-                st.caption("Warning: Deletion is permanent and removes the cryptographic proof from the ledger.")
-    except Exception:
-        st.error("Document data no longer available.")
+                if st.button("✅", key=f"verify_{doc['id']}", use_container_width=True, help="Go to Verify"):
+                    st.switch_page("views/2_Verify_Document.py")
+            with c3:
+                if st.button("🗑️", key=f"del_{doc['id']}", use_container_width=True, help="Delete Document"):
+                    db_client.delete_document_record(doc["id"], doc["image_url"])
+                    st.rerun()
 
 # ── Export ──────────────────────────────────────────────────────────────────────
 csv = df.to_csv(index=False).encode("utf-8")

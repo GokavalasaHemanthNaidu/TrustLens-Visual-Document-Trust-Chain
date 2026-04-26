@@ -43,6 +43,9 @@ with st.sidebar:
     if st.button("📊 My Vault", use_container_width=True):
         st.switch_page("views/3_Trust_Analytics.py")
     st.divider()
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
     st.caption(APP_VERSION)
 
 # ── Page Header ────────────────────────────────────────────────────────────────
@@ -165,8 +168,14 @@ if processed_images:
       <td style='padding:4px 8px;color:white;font-weight:600'>{entities.get('document_id',{}).get('value') or '—'} <span style='color:#6B7280;font-size:11px'>({entities.get('document_id',{}).get('confidence',0):.0f}% conf)</span></td>
     </tr>
     <tr>
-      <td style='padding:4px 8px;color:#9CA3AF'>{date_label}</td>
-      <td style='padding:4px 8px;color:white'>{entities.get('date',{}).get('value') or '—'}</td>
+      <td style='padding:4px 8px;color:#9CA3AF'>📅 Date of Issue</td>
+      <td style='padding:4px 8px;color:white'>{entities.get('date_of_issue',{}).get('value') or '—'}</td>
+      <td style='padding:4px 8px;color:#9CA3AF'>🎂 DOB</td>
+      <td style='padding:4px 8px;color:white'>{entities.get('dob',{}).get('value') or '—'}</td>
+    </tr>
+    <tr>
+      <td style='padding:4px 8px;color:#9CA3AF'>⏳ Validity</td>
+      <td style='padding:4px 8px;color:white'>{entities.get('validity',{}).get('value') or '—'}</td>
       <td style='padding:4px 8px;color:#9CA3AF'>💰 Amount</td>
       <td style='padding:4px 8px;color:white'>{entities.get('amount',{}).get('value') or '—'}</td>
     </tr>

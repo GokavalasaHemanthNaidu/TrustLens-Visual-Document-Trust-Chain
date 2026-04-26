@@ -29,6 +29,10 @@ with st.sidebar:
     else:
         st.info("🌍 Public verification — no login needed.")
     st.divider()
+    if st.session_state.get("user"):
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
     st.caption(f"{APP_VERSION}")
 
 # ── Page Content ────────────────────────────────────────────────────────────────
@@ -253,7 +257,9 @@ if submitted:
             ("📂 Category",    doc_type_val),
             ("🙍 Name",        ex.get("name", "—")),
             ("🆔 Ref ID",      ex.get("document_id", "—")),
-            (date_label,       ex.get("date", "—")),
+            ("📅 Date of Issue", ex.get("date_of_issue", "") or ex.get("date", "—")), # Fallback for old docs
+            ("🎂 Date of Birth", ex.get("dob", "—")),
+            ("⏳ Validity",    ex.get("validity", "—")),
             ("💰 Amount",      ex.get("amount", "—")),
             ("🗓️ Anchored On", doc_model.created_at[:10] if doc_model.created_at else "—"),
         ]
