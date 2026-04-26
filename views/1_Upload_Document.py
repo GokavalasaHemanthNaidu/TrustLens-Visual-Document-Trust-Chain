@@ -146,6 +146,8 @@ if processed_images:
             badge_color = "#10B981" if confidence >= 80 else \
                           "#F59E0B" if confidence >= 50 else "#6B7280"
 
+            date_label = "📅 Date of Birth" if doc_type in ["Aadhaar Card", "PAN Card", "Passport", "Voter ID", "Driving License"] else "📅 Date of Issue"
+
             st.markdown(f"""
 <div style='border:1px solid {badge_color};border-radius:14px;
      padding:18px;margin:10px 0;background:rgba(0,0,0,0.2)'>
@@ -163,7 +165,7 @@ if processed_images:
       <td style='padding:4px 8px;color:white;font-weight:600'>{entities.get('document_id',{}).get('value') or '—'} <span style='color:#6B7280;font-size:11px'>({entities.get('document_id',{}).get('confidence',0):.0f}% conf)</span></td>
     </tr>
     <tr>
-      <td style='padding:4px 8px;color:#9CA3AF'>📅 Date / DOB</td>
+      <td style='padding:4px 8px;color:#9CA3AF'>{date_label}</td>
       <td style='padding:4px 8px;color:white'>{entities.get('date',{}).get('value') or '—'}</td>
       <td style='padding:4px 8px;color:#9CA3AF'>💰 Amount</td>
       <td style='padding:4px 8px;color:white'>{entities.get('amount',{}).get('value') or '—'}</td>

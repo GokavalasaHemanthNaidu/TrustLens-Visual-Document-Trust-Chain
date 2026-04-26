@@ -123,28 +123,33 @@ def _donut_ask(image_bytes: bytes, token: str, question: str) -> Tuple[str, floa
 # LAYER 3 — Keyword / Layout heuristic fallback (works without API)
 # ══════════════════════════════════════════════════════════════════════════════
 _KEYWORD_RULES = [
-    (["aadhaar", "unique identification", "uidai"],          "Aadhaar Card"),
-    (["permanent account number", "income tax department"],  "PAN Card"),
-    (["passport", "republic of india", "nationality"],       "Passport"),
-    (["election commission", "voter", "epic"],               "Voter ID"),
-    (["driving licence", "transport", "motor vehicle"],      "Driving License"),
-    (["invoice", "invoice no", "gst", "bill to", "hsn"],     "Invoice / Receipt"),
+    # 1. Highly specific educational & professional documents FIRST
     (["10th", "secondary school certificate", "ssc", "matriculation"], "10th Marksheet"),
     (["12th", "higher secondary", "hsc", "intermediate"],    "12th Marksheet"),
     (["semester", "grade card", "btech", "degree", "university"], "Semester Grade Card"),
     (["marksheet", "mark sheet", "examination", "result",
       "grade", "cgpa", "sgpa"],                              "Marksheet / Result"),
+    (["certificate", "awarded", "completion", "participation",
+      "this is to certify", "internship", "experience"],     "Certificate"),
+    (["admit card", "hall ticket", "roll number",
+      "examination centre"],                                 "Admit Card"),
+    (["identity card", "id card", "reg no", "roll no"],      "Identity Card"),
+    
+    # 2. Government IDs (Checked later because Aadhaar/PAN is often printed ON Marksheets)
+    (["aadhaar", "unique identification", "uidai"],          "Aadhaar Card"),
+    (["permanent account number", "income tax department"],  "PAN Card"),
+    (["passport", "republic of india", "nationality"],       "Passport"),
+    (["election commission", "voter", "epic"],               "Voter ID"),
+    (["driving licence", "transport", "motor vehicle"],      "Driving License"),
+    
+    # 3. Financial & Legal
+    (["invoice", "invoice no", "gst", "bill to", "hsn"],     "Invoice / Receipt"),
     (["bank statement", "account no", "ifsc", "debit",
       "credit", "balance", "transaction"],                   "Bank Statement"),
     (["resume", "curriculum vitae", "objective", "skills",
       "experience", "education", "projects"],                "Resume / CV"),
-    (["certificate", "awarded", "completion", "participation",
-      "this is to certify"],                                 "Certificate"),
-    (["admit card", "hall ticket", "roll number",
-      "examination centre"],                                 "Admit Card"),
     (["legal", "affidavit", "notary", "whereby",
       "hereinafter"],                                        "Legal Document"),
-    (["identity card", "id card", "reg no", "roll no"],      "Identity Card"),
 ]
 
 def _keyword_classify(text: str) -> Tuple[str, float]:
@@ -152,10 +157,17 @@ def _keyword_classify(text: str) -> Tuple[str, float]:
     for keywords, label in _KEYWORD_RULES:
         hits = sum(1 for kw in keywords if kw in tl)
         if hits > 0:
-            # For highly specific labels, 1 hit is enough
             if label in ["10th Marksheet", "12th Marksheet", "Semester Grade Card", "Aadhaar Card", "PAN Card", "Passport", "Voter ID", "Driving License", "Identity Card", "Admit Card"]:
-                return label, min(75.0 + hits * 5, 92.0)
-            # For generic labels, require 2 hits or if the rule only has 1 keyword
+                conf = min(75.0 + hits * 5, 92.0)
+                
+                # Dynamic Semester Extraction
+                if label == "Semester Grade Card":
+                    sem_match = re.search(r'(?i)\b(1st|2nd|3rd|4th|5th|6th|7th|8th|first|second|third|fourth|fifth|sixth|seventh|eighth|i|ii|iii|iv|v|vi|vii|viii)\s*sem(?:ester)?', text)
+                    if sem_match:
+                        label = f"{sem_match.group(1).title()} Semester Grade Card"
+                        
+                return label, conf
+                
             if hits >= 2 or len(keywords) == 1:
                 conf = min(60 + hits * 8, 88)
                 return label, float(conf)
@@ -182,6 +194,8 @@ def _extract_name(text: str) -> Tuple[str, float]:
         m = re.search(p, clean_text)
         if m:
             val = m.group(1).strip()
+            # Strip trailing metadata like Roll No, Reg No, etc.
+            val = re.sub(r'(?i)\s*(Roll No\.?|Reg(?:istration)? No\.?|ID No\.?).*$', '', val).strip()
             if len(val.split()) >= 2:
                 return val.title(), 88.0
     # ALL-CAPS line fallback (Aadhaar style)
@@ -321,8 +335,9 @@ def analyze_document(image: Image.Image, filename: str = "") -> Dict[str, Any]:
 
     # ── Stage 6: Fallbacks ─────────────────────────────────────────────────
     if not name_val and filename:
-        name_val  = filename.split(".")[0].replace("_", " ").title()
-        name_conf = 30.0
+        if not re.search(r'(?i)(whatsapp|img_|screenshot|scan|untitled)', filename):
+            name_val  = filename.split(".")[0].replace("_", " ").title()
+            name_conf = 30.0
     if not id_val:
         id_val    = "TRU-" + str(int(time.time()))[-6:]
         id_conf   = 0.0

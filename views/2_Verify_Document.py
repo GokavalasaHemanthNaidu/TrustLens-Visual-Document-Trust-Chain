@@ -246,11 +246,14 @@ if submitted:
 
         # All Document Details
         st.markdown("#### 📋 Document Information")
+        doc_type_val = ex.get("doc_type", "—")
+        date_label = "📅 Date of Birth" if doc_type_val in ["Aadhaar Card", "PAN Card", "Passport", "Voter ID", "Driving License"] else "📅 Date of Issue"
+        
         fields = [
-            ("📂 Category",    ex.get("doc_type", "—")),
+            ("📂 Category",    doc_type_val),
             ("🙍 Name",        ex.get("name", "—")),
             ("🆔 Ref ID",      ex.get("document_id", "—")),
-            ("📅 Date / DOB",  ex.get("date", "—")),
+            (date_label,       ex.get("date", "—")),
             ("💰 Amount",      ex.get("amount", "—")),
             ("🗓️ Anchored On", doc_model.created_at[:10] if doc_model.created_at else "—"),
         ]
