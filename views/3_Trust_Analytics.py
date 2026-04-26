@@ -68,50 +68,59 @@ if search:
 
 st.dataframe(df.drop(columns=["Full_ID"]), use_container_width=True, hide_index=True)
 
-# ── Bulk Management ──────────────────────────────────────────────────────────────
+# ── Document Gallery & Bulk Management ─────────────────────────────────────────
 st.divider()
-st.markdown("### 🗃️ Bulk Management")
-st.caption("Select documents below to perform bulk actions.")
+st.markdown("### 🖼️ Document Gallery")
+st.caption("View, select, and manage your secured documents.")
 
-# Add a boolean 'Select' column for bulk actions
-df_bulk = df.copy()
-df_bulk.insert(0, "Select", False)
+# 1. Initialize native session state for checkboxes
+for d in docs:
+    key = f"select_{d['id']}"
+    if key not in st.session_state:
+        st.session_state[key] = False
 
-edited_df = st.data_editor(
-    df_bulk,
-    column_config={"Select": st.column_config.CheckboxColumn("Select", help="Select rows to delete", default=False)},
-    hide_index=True,
-    disabled=["ID", "Date", "Category", "Name", "Reference ID", "Full_ID"],
-    use_container_width=True
-)
+# 2. Action Bar
+col_a, col_b, col_c, col_d = st.columns([1.5, 1.5, 2, 2])
+with col_a:
+    if st.button("☑️ Select All", use_container_width=True):
+        for d in docs: st.session_state[f"select_{d['id']}"] = True
+        st.rerun()
+with col_b:
+    if st.button("☐ Deselect All", use_container_width=True):
+        for d in docs: st.session_state[f"select_{d['id']}"] = False
+        st.rerun()
 
-selected_rows = edited_df[edited_df["Select"]]
-if not selected_rows.empty:
-    if st.button(f"🗑️ Delete Selected ({len(selected_rows)})", type="primary", use_container_width=True):
-        with st.spinner("Deleting selected documents from immutable ledger..."):
-            for _, row in selected_rows.iterrows():
-                doc_to_delete = next((d for d in docs if d["id"] == row["Full_ID"]), None)
-                if doc_to_delete:
+# 3. Get currently selected documents
+selected_docs = [d for d in docs if st.session_state.get(f"select_{d['id']}", False)]
+
+with col_d:
+    if selected_docs:
+        if st.button(f"🗑️ Delete Selected ({len(selected_docs)})", type="primary", use_container_width=True):
+            with st.spinner("Erasing from immutable ledger..."):
+                for doc_to_delete in selected_docs:
                     db_client.delete_document_record(doc_to_delete["id"], doc_to_delete["image_url"])
-            st.success(f"Successfully deleted {len(selected_rows)} documents.")
+                    # Clean up state
+                    st.session_state.pop(f"select_{doc_to_delete['id']}", None)
+            st.success(f"Deleted {len(selected_docs)} documents!")
             time.sleep(1)
             st.rerun()
 
-# ── Document Gallery (Grid View) ───────────────────────────────────────────────
-st.divider()
-st.markdown("### 🖼️ Document Gallery")
-st.caption("View all secured documents at a glance.")
+st.markdown("<br>", unsafe_allow_html=True)
 
-# Create a 3-column grid
+# 4. Create the 3-column Grid
 cols = st.columns(3)
 for idx, doc in enumerate(docs):
     ex = doc.get("extracted_fields", {}) or {}
+    doc_id = doc["id"]
     with cols[idx % 3]:
         with st.container(border=True):
+            # Native checkbox
+            st.checkbox("Select Document", key=f"select_{doc_id}")
+            
             st.image(doc["image_url"], use_container_width=True)
             st.markdown(f"**{ex.get('doc_type', 'Document')}**")
             
-            # Show name and Ref ID cleanly
+            # Show details cleanly
             name_val = ex.get("name") or "—"
             id_val = ex.get("document_id") or "—"
             st.caption(f"**Name:** {name_val[:25] + '...' if len(name_val) > 25 else name_val}")
@@ -122,13 +131,14 @@ for idx, doc in enumerate(docs):
             # Action Buttons per card
             c1, c2, c3 = st.columns([1, 1, 1])
             with c1:
-                st.link_button("🔗", doc["image_url"], use_container_width=True, help="View Original Image")
+                st.link_button("🔗", doc["image_url"], use_container_width=True, help="View Original")
             with c2:
-                if st.button("✅", key=f"verify_{doc['id']}", use_container_width=True, help="Go to Verify"):
+                if st.button("✅", key=f"verify_{doc_id}", use_container_width=True, help="Verify"):
                     st.switch_page("views/2_Verify_Document.py")
             with c3:
-                if st.button("🗑️", key=f"del_{doc['id']}", use_container_width=True, help="Delete Document"):
-                    db_client.delete_document_record(doc["id"], doc["image_url"])
+                if st.button("🗑️", key=f"del_{doc_id}", use_container_width=True, help="Delete"):
+                    db_client.delete_document_record(doc_id, doc["image_url"])
+                    st.session_state.pop(f"select_{doc_id}", None)
                     st.rerun()
 
 # ── Export ──────────────────────────────────────────────────────────────────────
