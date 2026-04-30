@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import graphviz
+import difflib
+from PIL import Image
 from components.certificate import generate_pdf_certificate
-from utils import crypto_signer, hashing, db_client
+from utils import crypto_signer, hashing, db_client, ml_classifier
 from models.document import DocumentModel
 from config import APP_VERSION, APP_NAME, GITHUB_URL, SUPPORT_EMAIL
 
@@ -37,7 +39,436 @@ with st.sidebar:
 
 # ── Page Content ────────────────────────────────────────────────────────────────
 st.title("🔍 Universal Document Verification")
-st.markdown("Verify any document instantly. Select the type first, then enter any identifying detail.")
+st.markdown("Verify any document instantly — search by name/ID **or upload a suspicious document** to detect if it's fake.")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HELPER: Display a found document record
+# ═══════════════════════════════════════════════════════════════════════════════
+def _render_result(doc_record, extra_warning=None):
+    doc_model = DocumentModel(
+        user_id=doc_record["user_id"],
+        image_url=doc_record["image_url"],
+        extracted_fields=doc_record["extracted_fields"],
+        content_hash=doc_record["content_hash"],
+        digital_signature=doc_record["digital_signature"],
+        did_public_key=doc_record["did_public_key"],
+        id=doc_record["id"],
+        created_at=doc_record["created_at"],
+    )
+    ex = doc_model.extracted_fields or {}
+
+    recalc_hash = hashing.create_hash(doc_model.extracted_fields)
+    hash_valid  = (recalc_hash == doc_model.content_hash)
+    sig_valid   = crypto_signer.verify_signature(recalc_hash, doc_model.digital_signature, doc_model.did_public_key)
+    fully_valid = hash_valid and sig_valid
+
+    if extra_warning:
+        st.markdown(extra_warning, unsafe_allow_html=True)
+    elif fully_valid:
+        st.markdown("""
+        <div style='background:rgba(16,185,129,0.12);border:2px solid #10B981;border-radius:14px;padding:22px;text-align:center;margin-bottom:20px'>
+            <span style='font-size:40px'>🛡️</span>
+            <h2 style='color:#10B981;margin:4px 0'>100% AUTHENTIC</h2>
+            <p style='color:#A7F3D0;margin:0;font-size:14px'>Cryptographic integrity verified. This document has not been tampered with.</p>
+        </div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style='background:rgba(239,68,68,0.12);border:2px solid #EF4444;border-radius:14px;padding:22px;text-align:center;margin-bottom:20px'>
+            <span style='font-size:40px'>⚠️</span>
+            <h2 style='color:#EF4444;margin:4px 0'>TAMPER DETECTED</h2>
+            <p style='color:#FECACA;margin:0;font-size:14px'>This document fails cryptographic verification. It may have been modified.</p>
+        </div>""", unsafe_allow_html=True)
+
+    c1, c2 = st.columns([1.2, 2])
+    with c1:
+        st.image(doc_model.image_url, use_column_width=True, caption="📎 Original Anchored Document")
+        st.markdown("<hr style='margin:10px 0'>", unsafe_allow_html=True)
+        st.markdown("#### 📋 Document Information")
+        doc_type_val = ex.get("doc_type", "—")
+        fields = [
+            ("📂 Category",      doc_type_val),
+            ("🙍 Name",          ex.get("name", "—")),
+            ("🆔 Ref ID",        ex.get("document_id", "—")),
+            ("📅 Date of Issue", ex.get("date_of_issue", "") or ex.get("date", "—")),
+            ("🎂 Date of Birth", ex.get("dob", "—")),
+            ("⏳ Validity",      ex.get("validity", "—")),
+            ("💰 Amount",        ex.get("amount", "—")),
+            ("🗓️ Anchored On",  doc_model.created_at[:10] if doc_model.created_at else "—"),
+        ]
+        for label, value in fields:
+            if value and value != "—":
+                st.markdown(f"**{label}:** `{value}`")
+        st.markdown(f"**🔗 Ledger ID:** `{doc_model.id[:16]}...`")
+
+    with c2:
+        st.markdown("### 🔬 Trust Chain Provenance")
+        graph = graphviz.Digraph(engine="dot")
+        graph.attr(rankdir="LR", bgcolor="transparent", size="7,2.5")
+        ns = dict(style="filled", fontcolor="white", fontsize="11")
+        graph.node("A", "Physical\nDocument",  shape="note",     color="#3B82F6", **ns)
+        graph.node("B", "AI OCR\nExtraction",  shape="box",      color="#10B981", **ns)
+        graph.node("C", "SHA-256\nHash",        shape="box",      color="#8B5CF6", **ns)
+        graph.node("D", "ECDSA\nSignature",     shape="box",      color="#F59E0B", **ns)
+        graph.node("E", "Immutable\nLedger",    shape="cylinder", color="#EF4444", **ns)
+        graph.edges(["AB", "BC", "CD", "DE"])
+        st.graphviz_chart(graph)
+
+        with st.expander("✅ Step 1 — SHA-256 Content Fingerprint", expanded=True):
+            if hash_valid:
+                st.success("Content hash matches exactly — data is intact.")
+            else:
+                st.error("Hash mismatch — data may have been altered.")
+            st.code(doc_model.content_hash, language="text")
+
+        with st.expander("✅ Step 2 — ECDSA Signature Verification", expanded=True):
+            if sig_valid:
+                st.success("Signature verified — origin is authentic.")
+            else:
+                st.error("Signature invalid — cannot confirm origin.")
+
+        with st.expander("🕐 Step 3 — Verification Timeline"):
+            st.markdown(f"- 🟢 **Anchored:** `{doc_record.get('created_at','—')[:19]} UTC`")
+            st.markdown(f"- 🔵 **Public Verification:** Live (right now)")
+            st.markdown(f"- 🔗 **Full Ledger ID:** `{doc_model.id}`")
+
+    st.divider()
+    cert_bytes = generate_pdf_certificate(doc_model, f"{GITHUB_URL}/verify?doc_id={doc_model.id}")
+    if cert_bytes:
+        st.download_button(
+            "📥 Download Official Trust Certificate (PDF)",
+            cert_bytes,
+            f"TrustLens_Certificate_{doc_model.id[:8]}.pdf",
+            "application/pdf",
+            use_container_width=True,
+            type="primary"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TABS
+# ═══════════════════════════════════════════════════════════════════════════════
+tab_search, tab_upload = st.tabs([
+    "🔍 Search Ledger (Name / ID)",
+    "📤 Upload Document — Detect Fake"
+])
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TAB 1: EXISTING SEARCH FLOW
+# ───────────────────────────────────────────────────────────────────────────────
+with tab_search:
+    st.divider()
+    st.markdown("#### Step 1 — What type of document do you want to verify?")
+
+    DOC_TYPES = [
+        ("🔍 All Documents",       "all"),
+        ("🪪 Aadhaar Card",        "Aadhaar Card"),
+        ("💳 PAN Card",            "PAN Card"),
+        ("📘 Passport",            "Passport"),
+        ("🗳️ Voter ID",           "Voter ID"),
+        ("🚗 Driving License",     "Driving License"),
+        ("🎓 College / School ID", "id card"),
+        ("🏫 10th Marksheet",      "10th Marksheet"),
+        ("🏫 12th Marksheet",      "12th Marksheet"),
+        ("🎓 Semester Grade Card", "Semester Grade Card"),
+        ("📜 Certificate",         "Certificate"),
+        ("🧾 Invoice / Receipt",   "Invoice / Receipt"),
+        ("📊 Marksheet / Result",  "Marksheet / Result"),
+        ("🏦 Bank Statement",      "Bank Statement"),
+        ("📄 Resume / CV",         "Resume / CV"),
+        ("📑 Legal Document",      "Legal Document"),
+        ("📋 Other",               "Document"),
+    ]
+    doc_labels = [d[0] for d in DOC_TYPES]
+    doc_values = [d[1] for d in DOC_TYPES]
+
+    selected_type_label = st.radio(
+        "Select document category:",
+        options=doc_labels, horizontal=True, index=0,
+        key="doc_type_filter", label_visibility="collapsed"
+    )
+    selected_type = doc_values[doc_labels.index(selected_type_label)]
+    st.divider()
+
+    st.markdown("#### Step 2 — Enter any identifying detail")
+    if selected_type == "Aadhaar Card":
+        placeholder = "Enter Name OR 12-digit Aadhaar Number..."
+    elif selected_type == "PAN Card":
+        placeholder = "Enter Name OR PAN number (e.g. ABCDE1234F)..."
+    elif selected_type == "Passport":
+        placeholder = "Enter Name OR Passport number (e.g. P1234567)..."
+    elif selected_type == "all":
+        placeholder = "Enter Name, ID, Category, URL — search everything..."
+    else:
+        placeholder = f"Enter Name, ID, or any detail from the {selected_type}..."
+
+    with st.form(key="verify_form", border=False):
+        search_query = st.text_input(
+            "Search detail:", placeholder=placeholder,
+            key="universal_search", label_visibility="collapsed"
+        )
+        submitted = st.form_submit_button("🔍 Verify Now", type="primary", use_container_width=True)
+
+    if submitted:
+        if not search_query.strip():
+            st.warning("⚠️ Please enter a name, ID, or any detail to search.")
+            st.stop()
+
+        with st.spinner("🔎 Searching the immutable Trust Chain ledger..."):
+            doc_record  = None
+            search_term = search_query.strip().lower()
+
+            try:
+                if len(search_term) >= 32:
+                    doc_record = db_client.get_document_by_id(search_query.strip())
+            except Exception:
+                pass
+
+            if not doc_record:
+                try:
+                    query = db_client.supabase.table("documents").select("*")
+                    TYPE_KEYWORDS = {
+                        "id card": "id", "Invoice / Receipt": "invoice",
+                        "Marksheet / Result": "marksheet", "10th Marksheet": "10th",
+                        "12th Marksheet": "12th", "Semester Grade Card": "semester",
+                        "Bank Statement": "bank", "Resume / CV": "resume",
+                        "Legal Document": "legal", "Document": "",
+                    }
+                    filter_kw = TYPE_KEYWORDS.get(selected_type, selected_type)
+                    if selected_type != "all" and filter_kw:
+                        query = query.filter("extracted_fields->>doc_type", "ilike", f"%{filter_kw}%")
+                    res = query.or_(
+                        f"extracted_fields->>name.ilike.%{search_term}%,"
+                        f"extracted_fields->>document_id.ilike.%{search_term}%,"
+                        f"extracted_fields->>doc_type.ilike.%{search_term}%,"
+                        f"extracted_fields->>address.ilike.%{search_term}%,"
+                        f"image_url.ilike.%{search_term}%"
+                    ).execute()
+                    if res.data:
+                        doc_record = res.data[0]
+                except Exception as e:
+                    st.error(f"Search error: {e}")
+                    st.stop()
+
+            if not doc_record:
+                try:
+                    all_query = db_client.supabase.table("documents").select("*")
+                    if selected_type != "all":
+                        all_query = all_query.ilike("extracted_fields->>doc_type", f"%{selected_type}%")
+                    all_docs   = all_query.execute()
+                    best_ratio = 0.0
+                    best_doc   = None
+                    for d in (all_docs.data or []):
+                        ex = d.get("extracted_fields") or {}
+                        for cand in [ex.get("name",""), ex.get("document_id",""), ex.get("doc_type","")]:
+                            if not cand: continue
+                            ratio = difflib.SequenceMatcher(None, search_term, cand.lower()).ratio()
+                            if ratio > best_ratio:
+                                best_ratio = ratio
+                                best_doc   = d
+                    if best_ratio >= 0.6:
+                        doc_record = best_doc
+                        st.info(f"🔍 Fuzzy match found (similarity: {best_ratio*100:.0f}%)")
+                except Exception:
+                    pass
+
+        if not doc_record:
+            st.error("❌ No matching document found. Try a different name, ID, or category.")
+            st.stop()
+
+        _render_result(doc_record)
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# TAB 2: UPLOAD → FAKE DETECTION
+# ───────────────────────────────────────────────────────────────────────────────
+with tab_upload:
+    st.divider()
+    st.markdown("""
+    <div style='background:rgba(59,130,246,0.10);border:1px solid #3B82F6;border-radius:12px;padding:18px;margin-bottom:20px'>
+        <b>🕵️ How fake detection works:</b><br>
+        <ol style='margin:8px 0 0 0;padding-left:20px;color:#CBD5E1'>
+            <li>Upload any document image (even a suspected fake or edited one).</li>
+            <li>Our AI pipeline extracts the name, ID number, and document type.</li>
+            <li>We search our verified ledger for a matching anchored record.</li>
+            <li>If <b>no record found</b> → ❌ <b>FAKE / NOT VERIFIED</b> — document was never anchored.</li>
+            <li>If found but <b>fields differ</b> → ⚠️ <b>TAMPERED</b> — someone edited the document.</li>
+            <li>If found and <b>all fields match</b> → ✅ <b>AUTHENTIC</b>.</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
+
+    uploaded = st.file_uploader(
+        "Upload a document image to check authenticity:",
+        type=["jpg", "jpeg", "png", "pdf"],
+        key="fake_detect_uploader"
+    )
+
+    if uploaded:
+        # Show preview
+        col_prev, col_info = st.columns([1, 2])
+        with col_prev:
+            image = Image.open(uploaded).convert("RGB")
+            st.image(image, caption="📄 Uploaded Document", use_column_width=True)
+
+        with col_info:
+            st.markdown("#### 🤖 Running AI Analysis...")
+            with st.spinner("Extracting document fields with AI pipeline..."):
+                try:
+                    result = ml_classifier.analyze_document(image, uploaded.name)
+                except Exception as e:
+                    st.error(f"AI pipeline error: {e}")
+                    st.stop()
+
+            ex_uploaded = result.get("entities", {})
+            doc_type_up = result.get("document_type", "Document")
+            confidence  = result.get("confidence", 0.0)
+            ml_used     = result.get("ml_used", False)
+
+            # entities are nested: {"value": "...", "confidence": N}
+            name_up  = ex_uploaded.get("name", {}).get("value", "") if isinstance(ex_uploaded.get("name"), dict) else ex_uploaded.get("name", "")
+            id_up    = ex_uploaded.get("document_id", {}).get("value", "") if isinstance(ex_uploaded.get("document_id"), dict) else ex_uploaded.get("document_id", "")
+
+            st.markdown(f"**📂 Detected Type:** `{doc_type_up}` ({confidence:.1f}% confidence)")
+            st.markdown(f"**🙍 Extracted Name:** `{name_up or '— not detected'}`")
+            st.markdown(f"**🆔 Extracted ID:** `{id_up or '— not detected'}`")
+            st.markdown(f"**🤖 AI Model Used:** {'✅ YOLO11 + Donut' if ml_used else '⚙️ Heuristic'}")
+
+        st.divider()
+
+        # ── Search ledger for a matching record ──────────────────────────────
+        with st.spinner("🔎 Searching the immutable Trust Chain ledger for a matching record..."):
+            doc_record  = None
+            best_ratio  = 0.0
+
+            # Strategy 1: exact document_id match
+            if id_up:
+                try:
+                    res = db_client.supabase.table("documents").select("*")\
+                        .filter("extracted_fields->>document_id", "ilike", f"%{id_up}%")\
+                        .execute()
+                    if res.data:
+                        doc_record = res.data[0]
+                        best_ratio = 1.0
+                except Exception:
+                    pass
+
+            # Strategy 2: name fuzzy match within same doc type
+            if not doc_record and name_up:
+                try:
+                    all_res = db_client.supabase.table("documents").select("*")\
+                        .filter("extracted_fields->>doc_type", "ilike", f"%{doc_type_up.split()[0]}%")\
+                        .execute()
+                    for d in (all_res.data or []):
+                        stored_name = (d.get("extracted_fields") or {}).get("name", "")
+                        ratio = difflib.SequenceMatcher(
+                            None, name_up.lower(), stored_name.lower()
+                        ).ratio()
+                        if ratio > best_ratio:
+                            best_ratio = ratio
+                            doc_record = d
+                    if best_ratio < 0.55:
+                        doc_record = None   # too low — not a real match
+                except Exception:
+                    pass
+
+        # ── Verdict ─────────────────────────────────────────────────────────
+        if not doc_record:
+            # No matching record at all → FAKE / UNVERIFIED
+            st.markdown("""
+            <div style='background:rgba(239,68,68,0.15);border:2px solid #EF4444;
+                        border-radius:14px;padding:28px;text-align:center;margin:20px 0'>
+                <span style='font-size:48px'>🚨</span>
+                <h2 style='color:#EF4444;margin:8px 0'>DOCUMENT NOT VERIFIED — LIKELY FAKE</h2>
+                <p style='color:#FECACA;font-size:15px;margin:0'>
+                    No matching record was found in the TrustLens verified ledger.<br>
+                    This document was <b>never anchored</b> or has been <b>edited before upload</b>.
+                </p>
+            </div>""", unsafe_allow_html=True)
+
+            st.markdown("#### ℹ️ What this means:")
+            st.markdown("""
+- The name and/or ID number on this document **do not exist** in our verified database.
+- Either this document was **never registered** in TrustLens, **OR**
+- Someone **edited the name / ID / photo** on a real document — making it fake.
+- You should **not trust** this document without additional verification from the issuing authority.
+            """)
+
+        else:
+            # Match found — now compare extracted fields with stored fields
+            stored_ex   = doc_record.get("extracted_fields") or {}
+            stored_name = stored_ex.get("name", "")
+            stored_id   = stored_ex.get("document_id", "")
+            stored_type = stored_ex.get("doc_type", "")
+
+            name_match  = difflib.SequenceMatcher(None,
+                name_up.lower(), stored_name.lower()).ratio() >= 0.75
+            id_match    = (id_up.replace(" ","") == stored_id.replace(" ","")) if id_up and stored_id else True
+            type_match  = doc_type_up.lower().split()[0] in stored_type.lower()
+
+            fields_ok   = name_match and id_match
+
+            if fields_ok:
+                # Fields match → do full cryptographic check
+                _render_result(doc_record)
+            else:
+                # Fields DON'T match → document has been edited (TAMPERED/FAKE)
+                st.markdown("""
+                <div style='background:rgba(245,158,11,0.15);border:2px solid #F59E0B;
+                            border-radius:14px;padding:28px;text-align:center;margin:20px 0'>
+                    <span style='font-size:48px'>⚠️</span>
+                    <h2 style='color:#F59E0B;margin:8px 0'>TAMPERED / FAKE DOCUMENT DETECTED</h2>
+                    <p style='color:#FDE68A;font-size:15px;margin:0'>
+                        A record exists in the ledger BUT the details on this document
+                        <b>do not match</b> the anchored original.
+                        Someone has <b>edited this document</b>.
+                    </p>
+                </div>""", unsafe_allow_html=True)
+
+                # Show field-by-field comparison table
+                st.markdown("#### 🔬 Field Comparison: Uploaded vs. Anchored Original")
+
+                def status(ok): return "✅ Match" if ok else "❌ MISMATCH"
+
+                import pandas as pd
+                cmp_data = {
+                    "Field":           ["Document Type",  "Name",        "Reference ID"],
+                    "Uploaded Value":  [doc_type_up,      name_up,       id_up or "—"],
+                    "Anchored Value":  [stored_type,       stored_name,   stored_id or "—"],
+                    "Status":          [status(type_match), status(name_match), status(id_match)],
+                }
+                st.table(pd.DataFrame(cmp_data))
+
+                st.error("🚨 **Conclusion:** The extracted fields on this uploaded image differ from what was originally anchored and signed. This document has been **tampered with or forged**.")
+
+                with st.expander("📄 View the original anchored document record"):
+                    _render_result(doc_record, extra_warning="""
+                    <div style='background:rgba(239,68,68,0.1);border:1px solid #EF4444;
+                                border-radius:10px;padding:12px;margin-bottom:12px;text-align:center'>
+                        <b style='color:#EF4444'>⚠️ This is the ORIGINAL anchored record.
+                        The uploaded document does NOT match it.</b>
+                    </div>""")
+
+    else:
+        # No file yet — show instructions
+        st.markdown("""
+        <div style='text-align:center;padding:40px;color:#6B7280'>
+            <span style='font-size:56px'>📤</span><br><br>
+            <b style='font-size:18px;color:#9CA3AF'>Upload any document above</b><br>
+            <span style='font-size:14px'>Supported: JPG, PNG, PDF</span><br><br>
+            <span style='font-size:13px;color:#4B5563'>
+                You can upload a real document, a suspected fake,<br>
+                or an edited/Photoshopped document — we'll tell you if it's genuine.
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+st.markdown(
+    f"<div style='text-align:center;color:#6c757d;font-size:12px;margin-top:40px;"
+    f"border-top:1px solid #2d3748;padding-top:16px'>"
+    f"© 2026 {APP_NAME} | {APP_VERSION} | Public Verification Portal</div>",
+    unsafe_allow_html=True,
+)
 
 st.divider()
 
