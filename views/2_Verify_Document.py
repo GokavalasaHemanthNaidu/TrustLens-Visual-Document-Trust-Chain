@@ -220,61 +220,38 @@ with tab_search:
 
         with st.spinner("🔎 Searching the immutable Trust Chain ledger..."):
             doc_record  = None
-            search_term = search_query.strip().lower()
+            search_term = search_query.strip()
 
-            try:
-                if len(search_term) >= 32:
-                    doc_record = db_client.get_document_by_id(search_query.strip())
-            except Exception:
-                pass
+            # 1. Try direct UUID lookup
+            if len(search_term) >= 32:
+                doc_record = db_client.get_document_by_id(search_term)
 
+            # 2. MongoDB field search
             if not doc_record:
-                try:
-                    query = db_client.supabase.table("documents").select("*")
-                    TYPE_KEYWORDS = {
-                        "id card": "id", "Invoice / Receipt": "invoice",
-                        "Marksheet / Result": "marksheet", "10th Marksheet": "10th",
-                        "12th Marksheet": "12th", "Semester Grade Card": "semester",
-                        "Bank Statement": "bank", "Resume / CV": "resume",
-                        "Legal Document": "legal", "Document": "",
-                    }
-                    filter_kw = TYPE_KEYWORDS.get(selected_type, selected_type)
-                    if selected_type != "all" and filter_kw:
-                        query = query.filter("extracted_fields->>doc_type", "ilike", f"%{filter_kw}%")
-                    res = query.or_(
-                        f"extracted_fields->>name.ilike.%{search_term}%,"
-                        f"extracted_fields->>document_id.ilike.%{search_term}%,"
-                        f"extracted_fields->>doc_type.ilike.%{search_term}%,"
-                        f"extracted_fields->>address.ilike.%{search_term}%,"
-                        f"image_url.ilike.%{search_term}%"
-                    ).execute()
-                    if res.data:
-                        doc_record = res.data[0]
-                except Exception as e:
-                    st.error(f"Search error: {e}")
-                    st.stop()
+                results = db_client.search_documents(
+                    search_term=search_term.lower(),
+                    doc_type_filter=selected_type,
+                    limit=1
+                )
+                if results:
+                    doc_record = results[0]
 
+            # 3. Fuzzy fallback across all docs
             if not doc_record:
-                try:
-                    all_q = db_client.supabase.table("documents").select("*")
-                    if selected_type != "all":
-                        all_q = all_q.ilike("extracted_fields->>doc_type", f"%{selected_type}%")
-                    all_docs   = all_q.execute()
-                    best_ratio = 0.0
-                    best_doc   = None
-                    for d in (all_docs.data or []):
-                        ex = d.get("extracted_fields") or {}
-                        for cand in [ex.get("name",""), ex.get("document_id",""), ex.get("doc_type","")]:
-                            if not cand: continue
-                            r = difflib.SequenceMatcher(None, search_term, cand.lower()).ratio()
-                            if r > best_ratio:
-                                best_ratio = r
-                                best_doc   = d
-                    if best_ratio >= 0.6:
-                        doc_record = best_doc
-                        st.info(f"🔍 Fuzzy match (similarity: {best_ratio*100:.0f}%)")
-                except Exception:
-                    pass
+                all_docs = db_client.get_all_documents(limit=500)
+                best_ratio = 0.0
+                best_doc   = None
+                for d in all_docs:
+                    ex = d.get("extracted_fields") or {}
+                    for cand in [ex.get("name",""), ex.get("document_id",""), ex.get("doc_type","")]:
+                        if not cand: continue
+                        r = difflib.SequenceMatcher(None, search_term.lower(), cand.lower()).ratio()
+                        if r > best_ratio:
+                            best_ratio = r
+                            best_doc   = d
+                if best_ratio >= 0.6:
+                    doc_record = best_doc
+                    st.info(f"🔍 Fuzzy match (similarity: {best_ratio*100:.0f}%)") 
 
         if not doc_record:
             st.error("❌ No matching document found. Try a different name, ID, or category.")
@@ -348,33 +325,24 @@ with tab_upload:
             doc_record = None
             best_ratio = 0.0
 
+            # Strategy 1: exact document_id match
             if id_up:
-                try:
-                    res = db_client.supabase.table("documents").select("*")\
-                        .filter("extracted_fields->>document_id", "ilike", f"%{id_up}%")\
-                        .execute()
-                    if res.data:
-                        doc_record = res.data[0]
-                        best_ratio = 1.0
-                except Exception:
-                    pass
+                doc_record = db_client.search_by_document_id(id_up)
+                if doc_record:
+                    best_ratio = 1.0
 
+            # Strategy 2: fuzzy name match within detected doc type
             if not doc_record and name_up:
-                try:
-                    kw = doc_type_up.split()[0] if doc_type_up else ""
-                    all_res = db_client.supabase.table("documents").select("*")\
-                        .filter("extracted_fields->>doc_type", "ilike", f"%{kw}%")\
-                        .execute()
-                    for d in (all_res.data or []):
-                        sname = (d.get("extracted_fields") or {}).get("name", "")
-                        r = difflib.SequenceMatcher(None, name_up.lower(), sname.lower()).ratio()
-                        if r > best_ratio:
-                            best_ratio = r
-                            doc_record = d
-                    if best_ratio < 0.55:
-                        doc_record = None
-                except Exception:
-                    pass
+                kw = doc_type_up.split()[0] if doc_type_up else ""
+                candidates = db_client.search_by_doc_type(kw, limit=200)
+                for d in candidates:
+                    sname = (d.get("extracted_fields") or {}).get("name", "")
+                    r = difflib.SequenceMatcher(None, name_up.lower(), sname.lower()).ratio()
+                    if r > best_ratio:
+                        best_ratio = r
+                        doc_record = d
+                if best_ratio < 0.55:
+                    doc_record = None
 
         # ── Verdict ──────────────────────────────────────────────────────
         if not doc_record:

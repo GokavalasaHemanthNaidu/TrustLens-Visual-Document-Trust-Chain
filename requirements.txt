@@ -1,5 +1,8 @@
 streamlit>=1.36.0
-supabase>=2.3.0
+pymongo>=4.6.0
+dnspython>=2.4.0
+bcrypt>=4.1.0
+cloudinary>=1.36.0
 pytesseract>=0.3.10
 cryptography>=41.0.0
 python-dotenv>=1.0.0
