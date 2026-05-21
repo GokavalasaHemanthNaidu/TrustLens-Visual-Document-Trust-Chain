@@ -1,5 +1,7 @@
 streamlit>=1.36.0
 pymongo>=4.6.0
+easyocr>=1.7.0
+numpy>=1.24.0
 dnspython>=2.4.0
 bcrypt>=4.1.0
 cloudinary>=1.36.0

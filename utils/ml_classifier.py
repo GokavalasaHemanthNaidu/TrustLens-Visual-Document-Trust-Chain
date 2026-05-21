@@ -2,7 +2,8 @@
 """
 Universal AI Document Intelligence Module
 Architecture: Donut (Document Understanding Transformer) via HuggingFace API
-Fallback:     Keyword/layout heuristic classifier + Tesseract OCR
+Fallback:     Keyword/layout heuristic classifier + EasyOCR (multi-language)
+OCR Support:  English, Hindi (Devanagari), Telugu, Tamil, Kannada
 Output:       Structured JSON with per-field confidence scores
 """
 import io
@@ -10,9 +11,9 @@ import re
 import time
 import logging
 import requests
-import pytesseract
 from PIL import Image
 from typing import Dict, Any, Tuple, Optional
+from . import ocr_processor
 
 logger = logging.getLogger(__name__)
 
@@ -134,14 +135,14 @@ _KEYWORD_RULES = [
     (["admit card", "hall ticket", "roll number",
       "examination centre"],                                 "Admit Card"),
     (["identity card", "id card", "reg no", "roll no"],      "Identity Card"),
-    
-    # 2. Government IDs (Checked later because Aadhaar/PAN is often printed ON Marksheets)
+
+    # 2. Government IDs (checked later — Aadhaar/PAN often printed ON marksheets)
     (["aadhaar", "unique identification", "uidai"],          "Aadhaar Card"),
     (["permanent account number", "income tax department"],  "PAN Card"),
     (["passport", "republic of india", "nationality"],       "Passport"),
     (["election commission", "voter", "epic"],               "Voter ID"),
     (["driving licence", "transport", "motor vehicle"],      "Driving License"),
-    
+
     # 3. Financial & Legal
     (["invoice", "invoice no", "gst", "bill to", "hsn"],     "Invoice / Receipt"),
     (["bank statement", "account no", "ifsc", "debit",
@@ -150,6 +151,36 @@ _KEYWORD_RULES = [
       "experience", "education", "projects"],                "Resume / CV"),
     (["legal", "affidavit", "notary", "whereby",
       "hereinafter"],                                        "Legal Document"),
+
+    # ── HINDI (Devanagari script) keywords ───────────────────────────────────
+    # आधार = Aadhaar, पैन = PAN, पासपोर्ट = Passport, मतदाता = Voter
+    (["आधार", "भारतीय विशिष्ट", "यूआईडीएआई"],              "Aadhaar Card"),
+    (["स्थायी खाता संख्या", "आयकर विभाग"],                   "PAN Card"),
+    (["पासपोर्ट", "भारत गणराज्य"],                           "Passport"),
+    (["मतदाता", "निर्वाचन आयोग"],                            "Voter ID"),
+    (["अंक पत्र", "परीक्षा", "परिणाम", "अंक"],               "Marksheet / Result"),
+    (["प्रमाण पत्र", "प्रमाणित"],                             "Certificate"),
+    (["बैंक विवरण", "खाता संख्या"],                          "Bank Statement"),
+
+    # ── TELUGU (Telugu script) keywords ──────────────────────────────────────
+    # ఆధార్ = Aadhaar, పాస్‌పోర్ట్ = Passport, మతదారు = Voter
+    (["ఆధార్", "యుఐడిఎఐ"],                                  "Aadhaar Card"),
+    (["శాశ్వత ఖాతా సంఖ్య", "ఆదాయపు పన్ను"],                 "PAN Card"),
+    (["పాస్‌పోర్ట్", "భారత గణతంత్రం"],                       "Passport"),
+    (["మతదారు గుర్తింపు", "ఎన్నికల సంఘం"],                   "Voter ID"),
+    (["మార్కు జాబితా", "పరీక్ష", "ఫలితం"],                   "Marksheet / Result"),
+    (["ధృవీకరణ పత్రం", "సర్టిఫికేట్"],                       "Certificate"),
+    (["బ్యాంక్ స్టేట్‌మెంట్", "ఖాతా నంబర్"],                 "Bank Statement"),
+
+    # ── TAMIL (Tamil script) keywords ─────────────────────────────────────────
+    # ஆதார் = Aadhaar, கடவுச்சீட்டு = Passport, வாக்காளர் = Voter
+    (["ஆதார்", "யுஐடிஏஐ"],                                  "Aadhaar Card"),
+    (["நிரந்தர கணக்கு எண்", "வருமான வரி"],                   "PAN Card"),
+    (["கடவுச்சீட்டு", "இந்தியக் குடியரசு"],                  "Passport"),
+    (["வாக்காளர்", "தேர்தல் ஆணையம்"],                        "Voter ID"),
+    (["மதிப்பெண் பட்டியல்", "தேர்வு", "முடிவு"],             "Marksheet / Result"),
+    (["சான்றிதழ்", "தகுதி"],                                 "Certificate"),
+    (["வங்கி அறிக்கை", "கணக்கு எண்"],                        "Bank Statement"),
 ]
 
 def _keyword_classify(text: str) -> Tuple[str, float]:
@@ -280,12 +311,14 @@ def _extract_address(text: str) -> Tuple[str, float]:
 def analyze_document(image: Image.Image, filename: str = "") -> Dict[str, Any]:
     """
     Universal Document Intelligence Pipeline.
+    OCR: EasyOCR (English + Hindi + Telugu + Tamil + Kannada) with Tesseract fallback.
 
     Returns:
     {
       "document_type": "Aadhaar Card",
       "confidence":    96.3,
       "ml_used":       True,
+      "language":      "telugu",
       "entities": {
         "name":        {"value": "Hemanth Naidu",  "confidence": 88.0},
         "document_id": {"value": "225300234512",   "confidence": 95.0},
@@ -299,6 +332,7 @@ def analyze_document(image: Image.Image, filename: str = "") -> Dict[str, Any]:
         "document_type": "Document",
         "confidence":    0.0,
         "ml_used":       False,
+        "language":      "english",
         "entities":      {
             "name":          {"value": "", "confidence": 0.0},
             "document_id":   {"value": "", "confidence": 0.0},
@@ -321,11 +355,11 @@ def analyze_document(image: Image.Image, filename: str = "") -> Dict[str, Any]:
             result["confidence"]    = ml_conf
             result["ml_used"]       = True
 
-    # ── Stage 2: OCR (always run) ──────────────────────────────────────────
-    try:
-        raw_text = pytesseract.image_to_string(image)
-    except Exception:
-        raw_text = ""
+    # ── Stage 2: Multi-language OCR (EasyOCR → Tesseract fallback) ───────────
+    raw_text = ocr_processor.process_image(image)
+    detected_lang = ocr_processor.detect_language(raw_text)
+    result["language"] = detected_lang
+    logger.info(f"Detected script language: {detected_lang}")
 
     # ── Stage 3: Keyword fallback if ML didn't fire ────────────────────────
     if not result["ml_used"] and raw_text.strip():
@@ -378,7 +412,7 @@ def flatten_for_db(result: Dict[str, Any], manual_override: str = "") -> Dict[st
         "doc_type":      manual_override if manual_override else result.get("document_type", "Document"),
         "name":          e.get("name",          {}).get("value", ""),
         "document_id":   e.get("document_id",   {}).get("value", ""),
-        "date":          e.get("date_of_issue", {}).get("value", "") or e.get("dob", {}).get("value", ""), # Legacy compat
+        "date":          e.get("date_of_issue", {}).get("value", "") or e.get("dob", {}).get("value", ""),
         "dob":           e.get("dob",           {}).get("value", ""),
         "date_of_issue": e.get("date_of_issue", {}).get("value", ""),
         "validity":      e.get("validity",      {}).get("value", ""),
@@ -386,4 +420,5 @@ def flatten_for_db(result: Dict[str, Any], manual_override: str = "") -> Dict[st
         "address":       e.get("address",       {}).get("value", ""),
         "ml_confidence": result.get("confidence", 0.0),
         "ml_used":       result.get("ml_used", False),
+        "language":      result.get("language", "english"),   # ← NEW: detected script
     }
