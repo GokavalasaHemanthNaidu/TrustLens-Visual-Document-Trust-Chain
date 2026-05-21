@@ -4,7 +4,7 @@ import graphviz
 import difflib
 from PIL import Image
 from components.certificate import generate_pdf_certificate
-from utils import crypto_signer, hashing, db_client, ml_classifier
+from utils import crypto_signer, hashing, db_client, ml_classifier, ela_detector
 from models.document import DocumentModel
 from config import APP_VERSION, APP_NAME, GITHUB_URL, SUPPORT_EMAIL
 
@@ -319,6 +319,32 @@ with tab_upload:
             st.markdown(f"**🆔 ID:** `{id_up or '— not detected'}`")
             st.markdown(f"**🤖 Model:** {'✅ YOLO11 + Donut' if ml_used else '⚙️ Heuristic'}")
 
+            # Forgery & Deepfake Analysis
+            with st.spinner("Forensic scanning..."):
+                try:
+                    _, mean_err, heatmap_img = ela_detector.calculate_ela(image)
+                    meta_audit = ela_detector.audit_metadata(image)
+                    forgery_result = ela_detector.assess_forgery_risk(mean_err, meta_audit, uploaded.name)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Forgery analysis failed: {e}")
+                    forgery_result = {
+                        "risk_level": "UNKNOWN",
+                        "risk_score": 0.0,
+                        "details": [f"Analysis failed: {e}"]
+                    }
+                    meta_audit = {"has_exif": False, "is_stripped": True, "software": "", "warnings": []}
+                    heatmap_img = None
+
+            if forgery_result["risk_level"] == "HIGH":
+                risk_badge = "🔴 **HIGH RISK (Tampered / Synthetic)**"
+            elif forgery_result["risk_level"] == "MEDIUM":
+                risk_badge = "🟡 **MEDIUM RISK (Suspicious Profile)**"
+            else:
+                risk_badge = "🟢 **LOW RISK (Authentic Scan)**"
+            
+            st.markdown(f"**🛡️ Forgery Risk:** {risk_badge}")
+
         st.divider()
 
         with st.spinner("🔎 Searching ledger for a matching record..."):
@@ -408,6 +434,73 @@ with tab_upload:
                                 border-radius:10px;padding:12px;margin-bottom:12px;text-align:center'>
                         <b style='color:#EF4444'>⚠️ ORIGINAL anchored record — uploaded image does NOT match.</b>
                     </div>""")
+
+        # ── Forgery Audit Section ───────────────────────────────────────────
+        st.markdown("<hr style='margin:30px 0'>", unsafe_allow_html=True)
+        st.markdown("### 🔬 Advanced Forgery & AI-Deepfake Audit")
+        
+        risk_lvl = forgery_result["risk_level"]
+        risk_score = forgery_result["risk_score"]
+        
+        if risk_lvl == "HIGH":
+            badge_color = "#EF4444"
+            badge_bg = "rgba(239,68,68,0.12)"
+            badge_text = "🚨 CRITICAL FORGERY RISK"
+        elif risk_lvl == "MEDIUM":
+            badge_color = "#F59E0B"
+            badge_bg = "rgba(245,158,11,0.12)"
+            badge_text = "⚠️ MODERATE RISK ALERT"
+        else:
+            badge_color = "#10B981"
+            badge_bg = "rgba(16,185,129,0.12)"
+            badge_text = "🟢 LOW RISK SCAN"
+            
+        st.markdown(f"""
+        <div style='display:flex;align-items:center;background:{badge_bg};border:1.5px solid {badge_color};
+                    border-radius:10px;padding:16px;margin-bottom:20px'>
+            <div style='flex:1'>
+                <h4 style='margin:0;color:{badge_color};font-size:18px'>{badge_text} — Trust Index: {100 - risk_score:.1f}%</h4>
+                <p style='margin:5px 0 0 0;color:#CBD5E1;font-size:13px'>
+                    TrustLens scanned high-frequency noise patterns, double JPEG compression irregularities, and metadata integrity.
+                </p>
+            </div>
+            <div style='font-size:32px;font-weight:bold;color:{badge_color};margin-left:15px'>
+                {risk_score}%
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        c_orig, c_ela = st.columns(2)
+        with c_orig:
+            st.image(image, caption="📷 Original Uploaded Image", use_column_width=True)
+        with c_ela:
+            if heatmap_img:
+                st.image(heatmap_img, caption="🔥 Error Level Analysis (ELA) Heatmap", use_column_width=True)
+            else:
+                st.info("Heatmap visualization not available.")
+                
+        st.caption("ℹ️ *Error Level Analysis (ELA) detects differences in compression ratios across the image. "
+                   "A spliced, edited, or digitally manipulated region will typically stand out as a bright glowing shape.*")
+        
+        with st.expander("📊 Forensic Diagnostics & Indicators", expanded=True):
+            st.markdown("#### Forgery Indicators")
+            for detail in forgery_result["details"]:
+                if "Critically" in detail or "software" in detail or "Software" in detail:
+                    st.markdown(f"- 🔴 **{detail}**")
+                elif "Elevated" in detail or "stripped" in detail or "Screenshot" in detail:
+                    st.markdown(f"- 🟡 **{detail}**")
+                else:
+                    st.markdown(f"- 🟢 **{detail}**")
+                    
+            st.markdown("---")
+            st.markdown("#### Metadata Audit Logs")
+            if meta_audit["has_exif"]:
+                st.markdown(f"**Capture Device Make:** `{meta_audit['device_make'] or 'Unknown'}`")
+                st.markdown(f"**Capture Device Model:** `{meta_audit['device_model'] or 'Unknown'}`")
+                st.markdown(f"**Software Flag:** `{meta_audit['software'] or 'None (Original Camera Scan)'}`")
+                st.markdown(f"**Date/Time of Capture:** `{meta_audit['capture_date'] or 'Unknown'}`")
+            else:
+                st.info("⚠️ No EXIF metadata was found. This image is fully stripped of metadata (typical of downloaded web images, screenshots, or AI fakes).")
     else:
         st.markdown("""
         <div style='text-align:center;padding:40px;color:#6B7280'>
