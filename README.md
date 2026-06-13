@@ -8,7 +8,8 @@
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://trustlens-visual-document-trust-chain.streamlit.app/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%20%2B%20Storage-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.io)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas%20NoSQL-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://mongodb.com)
+[![Cloudinary](https://img.shields.io/badge/Cloudinary-Image%20Storage-3448C5?style=flat-square&logo=cloudinary&logoColor=white)](https://cloudinary.com)
 [![HuggingFace](https://img.shields.io/badge/HuggingFace-Donut%20%2B%20YOLO-FFD21E?style=flat-square&logo=huggingface&logoColor=black)](https://huggingface.co)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 
@@ -24,7 +25,7 @@ TrustLens is a **proof-of-concept document verification prototype** that explore
 
 This project demonstrates an end-to-end understanding of AI pipelines, cryptography, and cloud deployment, exploring how automated document verification could reduce manual review overhead.
 
-> 💡 **Core Experiment:** Explores the integration of VLM-based extraction with cryptographic signatures in a single deployable prototype, deployed on Streamlit Community Cloud with basic auth.
+> 💡 **Core Experiment:** Explores the integration of VLM-based extraction with cryptographic signatures in a single deployable prototype, deployed on Streamlit Community Cloud.
 
 ---
 
@@ -35,11 +36,11 @@ This project demonstrates an end-to-end understanding of AI pipelines, cryptogra
 | 🧠 **Multi-Layer AI Classification** | Identifies documents using a pipeline of object detection (YOLO), OCR, and rule-based extraction. |
 | 🔒 **SHA-256 Fingerprinting** | Creates a unique cryptographic hash of extracted data (any tampering changes the hash). |
 | ✍️ **Standard ECDSA Digital Signature** | Signs each document's hash (SECP256R1). *Note: Keys are generated per-session in memory for prototype purposes.* |
-| 📊 **PostgreSQL Append-Only Ledger** | Stores records in Supabase PostgreSQL. *Note: See security section for RLS policies.* |
+| 📊 **MongoDB Atlas Ledger** | Stores records in a MongoDB Atlas database. |
+| ☁️ **Cloudinary Storage** | Securely stores document images via Cloudinary. |
 | 🌐 **Public Verification Portal** | Allows verification using Name, ID, or Category without login. |
 | 📥 **Trust Certificate PDF** | Downloads a certificate with embedded document photo + QR code. |
 | 🗑️ **Full Data Control** | Users can delete their documents from the ledger and cloud storage. |
-| 🔑 **Forgot Password** | Built-in password reset via Supabase Auth email. |
 
 ---
 
@@ -47,12 +48,12 @@ This project demonstrates an end-to-end understanding of AI pipelines, cryptogra
 
 ### Target Architecture (v2.0)
 ```text
-[Next.js Frontend] → [FastAPI Gateway] → [MongoDB + Cloudinary]
+[Next.js Frontend] → [FastAPI Gateway] → [PostgreSQL/MongoDB + AWS S3]
 ```
 
 ### Current Implementation (v1.0 — Learning Prototype)
 ```text
-[Streamlit App] → [Supabase (PostgreSQL + Storage + Auth)]
+[Streamlit App] → [MongoDB Atlas + Cloudinary]
 ```
 
 **Rationale:** The Streamlit prototype validates the core concept (document → AI extraction → cryptographic signature → verification) with minimal infrastructure. The FastAPI/Next.js architecture is the production target for v2.0, which allows async ML workers, proper rate limiting, and a decoupled frontend.
@@ -89,7 +90,7 @@ This is a proof-of-concept for learning purposes. The following production-grade
 
 | Security Control | Status | Notes |
 |---|---|---|
-| **Row Level Security (RLS)** | Planned | Supabase RLS policies need to be configured so users only see their own data. |
+| **Data Isolation** | Partial | Application-level filtering isolates user data, but database-level roles (like RLS) would be stricter in production. |
 | **Rate Limiting** | Planned | No built-in rate limiting in Streamlit; would need FastAPI gateway. |
 | **HSM Key Storage** | Planned | ECDSA keys are generated in-memory per session; production would use AWS KMS or HashiCorp Vault. |
 | **Input Validation** | Partial | Upload file size/MIME limits implemented; needs deeper content scanning. |
@@ -105,14 +106,12 @@ This is a proof-of-concept for learning purposes. The following production-grade
 
 **v1.0 (Current):**
 - ✅ Core upload → extract → sign → verify flow
-- ✅ Basic Supabase auth and storage
+- ✅ MongoDB database and Cloudinary storage integration
 - ✅ Public verification portal
-- ⚠️ No RLS (data visible to all authenticated users)
-- ⚠️ No rate limiting
+- ⚠️ No network-level rate limiting
 - ⚠️ Keys in memory
 
 **v1.5 (Next):**
-- [ ] Add Supabase RLS policies
 - [ ] Implement robust input validation (file size, type, content)
 - [ ] Add basic rate limiting via Streamlit caching
 - [ ] Benchmark with 100+ samples per document type
@@ -146,9 +145,12 @@ pip install -r requirements.txt
 ### 3. Configure Secrets
 Create `.streamlit/secrets.toml`:
 ```toml
-SUPABASE_URL = "your_supabase_url"
-SUPABASE_KEY = "your_supabase_anon_key"
-HF_TOKEN    = "your_huggingface_token"
+MONGO_URI             = "your_mongo_connection_string"
+MONGO_DB              = "trustlens"
+CLOUDINARY_CLOUD_NAME = "your_cloud_name"
+CLOUDINARY_API_KEY    = "your_api_key"
+CLOUDINARY_API_SECRET = "your_api_secret"
+HF_TOKEN              = "your_huggingface_token"
 ```
 
 ### 4. Run Locally
