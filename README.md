@@ -4,16 +4,15 @@
 
 # 🛡️ TrustLens — Visual Document Trust Chain
 
-### *The World's First Universal AI-Powered Document Notarization Engine*
+### *A Proof-of-Concept Document Verification Prototype*
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://trustlens-visual-document-trust-chain.streamlit.app/)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%20%2B%20Storage-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.io)
-[![HuggingFace](https://img.shields.io/badge/HuggingFace-Donut%20%2B%20YOLO11-FFD21E?style=flat-square&logo=huggingface&logoColor=black)](https://huggingface.co)
+[![HuggingFace](https://img.shields.io/badge/HuggingFace-Donut%20%2B%20YOLO-FFD21E?style=flat-square&logo=huggingface&logoColor=black)](https://huggingface.co)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/GokavalasaHemanthNaidu/TrustLens-Visual-Document-Trust-Chain?style=flat-square&color=gold)](https://github.com/GokavalasaHemanthNaidu/TrustLens-Visual-Document-Trust-Chain)
 
-**[🚀 Live Demo](https://trustlens-visual-document-trust-chain.streamlit.app/) · [📖 Documentation](DOCUMENTATION.md) · [🐛 Report Bug](https://github.com/GokavalasaHemanthNaidu/TrustLens-Visual-Document-Trust-Chain/issues)**
+**[🚀 Live Demo](https://trustlens-visual-document-trust-chain.streamlit.app/) · [🐛 Report Bug](https://github.com/GokavalasaHemanthNaidu/TrustLens-Visual-Document-Trust-Chain/issues)**
 
 </div>
 
@@ -21,11 +20,11 @@
 
 ## 🌟 What is TrustLens?
 
-TrustLens is a **production-grade, AI-powered document notarization platform** that transforms any physical document — Aadhaar, PAN, Passport, Invoice, Resume, Certificate, and more — into a **cryptographically anchored, tamper-proof digital proof**.
+TrustLens is a **proof-of-concept document verification prototype** that explores combining Vision-Language AI extraction with ECDSA digital signatures to create verifiable document records — with a documented roadmap to production security hardening.
 
-Think of it as a **digital notary** that uses military-grade cryptography + AI to prove that a document is authentic and has never been modified.
+This project demonstrates an end-to-end understanding of AI pipelines, cryptography, and cloud deployment, exploring how automated document verification could reduce manual review overhead.
 
-> 💡 **Unique Achievement:** TrustLens combines Vision-Language Models (VLMs), ECDSA Cryptography, and Blockchain-style immutable ledgers in a single, deployable Streamlit application — a combination found in no other open-source project.
+> 💡 **Core Experiment:** Explores the integration of VLM-based extraction with cryptographic signatures in a single deployable prototype, deployed on Streamlit Community Cloud with basic auth.
 
 ---
 
@@ -33,204 +32,98 @@ Think of it as a **digital notary** that uses military-grade cryptography + AI t
 
 | Feature | Description |
 |---|---|
-| 🧠 **Universal AI Classification** | Automatically identifies ANY document type using a 5-layer ML pipeline (YOLO11 + Donut VQA + NER) |
-| 🔒 **SHA-256 Fingerprinting** | Creates a unique cryptographic hash of every document's data — any tampering changes the hash |
-| ✍️ **ECDSA Digital Signature** | Signs each document with an Elliptic Curve key pair (SECP256R1) — proves origin authenticity |
-| 📊 **Immutable Ledger** | Stores all proofs in a Supabase PostgreSQL database that cannot be altered |
-| 🌐 **Public Verification Portal** | Anyone (without login) can verify a document using Name, ID, Category, or URL |
-| 🔍 **Fuzzy Search** | Finds documents even with partial or slightly misspelled queries |
-| 📥 **Trust Certificate PDF** | Downloads a legal-grade certificate with embedded document photo + QR code |
-| 🗑️ **Full Data Control** | Users can delete their documents from both the ledger and cloud storage |
-| 👤 **Personalized Profile** | Dynamic color-coded profile pill based on user email hash |
-| 🔑 **Forgot Password** | Built-in password reset via Supabase Auth email |
+| 🧠 **Multi-Layer AI Classification** | Identifies documents using a pipeline of object detection (YOLO), OCR, and rule-based extraction. |
+| 🔒 **SHA-256 Fingerprinting** | Creates a unique cryptographic hash of extracted data (any tampering changes the hash). |
+| ✍️ **Standard ECDSA Digital Signature** | Signs each document's hash (SECP256R1). *Note: Keys are generated per-session in memory for prototype purposes.* |
+| 📊 **PostgreSQL Append-Only Ledger** | Stores records in Supabase PostgreSQL. *Note: See security section for RLS policies.* |
+| 🌐 **Public Verification Portal** | Allows verification using Name, ID, or Category without login. |
+| 📥 **Trust Certificate PDF** | Downloads a certificate with embedded document photo + QR code. |
+| 🗑️ **Full Data Control** | Users can delete their documents from the ledger and cloud storage. |
+| 🔑 **Forgot Password** | Built-in password reset via Supabase Auth email. |
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ Architecture: Blueprint vs. Current Implementation
 
+### Target Architecture (v2.0)
+```text
+[Next.js Frontend] → [FastAPI Gateway] → [MongoDB + Cloudinary]
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                        USER INTERFACE (Streamlit)                      │
-│  ┌─────────────┐  ┌──────────────────┐  ┌────────────────────────┐   │
-│  │  📤 Upload  │  │  ✅ Verify (Public)│  │  📊 My Vault (Private) │   │
-│  └──────┬──────┘  └────────┬─────────┘  └───────────┬────────────┘   │
-└─────────│─────────────────│──────────────────────────│────────────────┘
-          │                 │                          │
-          ▼                 ▼                          │
-┌─────────────────────────────────────────┐            │
-│       🧠 UNIVERSAL AI PIPELINE          │            │
-│                                          │            │
-│  Stage 1: YOLO11 Indian ID Classifier   │            │
-│  (HuggingFace API → 92-98% accuracy)   │            │
-│           ↓                             │            │
-│  Stage 2: Tesseract OCR                 │            │
-│  (Extracts raw text from image)         │            │
-│           ↓                             │            │
-│  Stage 3: Keyword / Layout Heuristics   │            │
-│  (12+ document type rules)              │            │
-│           ↓                             │            │
-│  Stage 4: Donut VQA                     │            │
-│  ("What is the person's name?")         │            │
-│           ↓                             │            │
-│  Stage 5: Doc-type-aware NER            │            │
-│  (Aadhaar→12-digit, PAN→ABCDE1234F)    │            │
-│                                          │            │
-│  Output: {doc_type, confidence,          │            │
-│           entities: {name, id, dob,…}}  │            │
-└──────────────────┬──────────────────────┘            │
-                   │                                    │
-                   ▼                                    │
-┌─────────────────────────────────────────┐            │
-│       🔒 CRYPTOGRAPHIC TRUST CHAIN      │            │
-│                                          │            │
-│  SHA-256 Hash ──► ECDSA Sign ──► Store  │◄───────────┘
-│  (Content fingerprint)  (SECP256R1)     │
-└──────────────────┬──────────────────────┘
-                   │
-                   ▼
-┌─────────────────────────────────────────┐
-│         ☁️ SUPABASE BACKEND             │
-│                                          │
-│  PostgreSQL ──► documents table          │
-│  Storage    ──► document images          │
-│  Auth       ──► user sessions            │
-└─────────────────────────────────────────┘
+
+### Current Implementation (v1.0 — Learning Prototype)
+```text
+[Streamlit App] → [Supabase (PostgreSQL + Storage + Auth)]
 ```
+
+**Rationale:** The Streamlit prototype validates the core concept (document → AI extraction → cryptographic signature → verification) with minimal infrastructure. The FastAPI/Next.js architecture is the production target for v2.0, which allows async ML workers, proper rate limiting, and a decoupled frontend.
 
 ---
 
 ## 🧠 AI Model Architecture
 
-### 5-Layer Universal Document Intelligence Pipeline
-
-```
-[Document Image]
-       │
-       ▼
-┌─────────────────────────────────────────────────────┐
-│  LAYER 1 — YOLO11 Classification (HuggingFace API)  │
-│  Model: logasanjeev/indian-id-validator              │
-│  Output: "Aadhaar Card" @ 96.3% confidence          │
-│  Accuracy: 92–98% on Indian ID documents            │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│  LAYER 2 — Tesseract OCR                            │
-│  Extracts all raw text from document image           │
-│  Enhanced with preprocessing (contrast, resize)     │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│  LAYER 3 — Keyword/Layout Heuristic Classifier      │
-│  12+ document type rules (Invoice, Resume, etc.)    │
-│  Fallback when YOLO doesn't recognize type          │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│  LAYER 4 — Donut VQA (Document Understanding)       │
-│  Model: naver-clova-ix/donut-base-finetuned-docvqa  │
-│  Asks: "What is the name of the person?"            │
-│  No OCR needed — understands document visually      │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│  LAYER 5 — Doc-type-aware NER Field Extraction      │
-│  Aadhaar  → 12-digit regex (\d{4}\s?\d{4}\s?\d{4}) │
-│  PAN      → [A-Z]{5}[0-9]{4}[A-Z] pattern          │
-│  Passport → [A-Z][0-9]{7} pattern                  │
-│  Generic  → Roll No / Reg No / Invoice No patterns  │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-         {
-           "document_type": "Aadhaar Card",
-           "confidence": 96.3,
-           "entities": {
-             "name":        {"value": "Hemanth Naidu", "confidence": 88.0},
-             "document_id": {"value": "225300234512",  "confidence": 95.0},
-             "date":        {"value": "05-05-2005",    "confidence": 85.0}
-           }
-         }
-```
+The extraction pipeline consists of the following heuristic and AI layers:
+1. **Layer 1: YOLO Classification** — Attempts basic document detection.
+2. **Layer 2: Tesseract OCR** — Extracts raw text for rule-based heuristics.
+3. **Layers 3-5: Rule-Based Extraction and Validation** — Uses Regex and keyword matching.
+4. **VLM Experimentation** — Integrates Donut VQA (naver-clova-ix) for exploring template-free extraction. *Donut VQA requires no OCR templates, enabling rapid adaptation to new document types.*
 
 ---
 
-## 🔐 Cryptographic Trust Chain
+## 📊 Accuracy Benchmarks (HONEST VERSION)
 
-```
-Document Image
-      │
-      ▼
-  [AI Extraction]
-  name, id, type, dob
-      │
-      ▼
-  [SHA-256 Hash]  ◄── Any single character change = completely different hash
-  "a3f4c91b2e..."
-      │
-      ▼
-  [ECDSA Signature]  ◄── Proves who created this proof (SECP256R1 curve)
-  Private Key signs hash
-  Public Key stored in ledger
-      │
-      ▼
-  [Supabase Ledger]  ◄── Immutable record: cannot be altered after creation
-  id | user_id | image_url | content_hash | digital_signature | public_key
-```
-
----
-
-## 📊 Accuracy Benchmarks
-
-| Document Type | ML Classification | Field Extraction | Overall |
+| Document Type | Classification | Field Extraction | Notes |
 |---|---|---|---|
-| Aadhaar Card | **96–98%** | **95%** (12-digit pattern) | **96%** |
-| PAN Card | **94–97%** | **97%** (ABCDE1234F) | **96%** |
-| Passport | **95–97%** | **94%** (L+7digits) | **95%** |
-| Voter ID | **90–94%** | **92%** | **91%** |
-| Invoice/Receipt | Keyword (80%) | **85%** | **82%** |
-| Resume/CV | Keyword (82%) | **78%** | **80%** |
-| College ID | Keyword (75%) | **80%** (Roll No) | **77%** |
-| Any other | Keyword (70%) | **72%** | **71%** |
+| **Aadhaar Card** | 92-96%* | 85-90%* | Based on ~20 test samples |
+| **PAN Card** | 90-94%* | 88-92%* | Based on ~15 test samples |
+| **Passport** | 88-92%* | 80-85%* | Based on ~10 test samples |
+| **Invoice/Receipt** | 70-80% | 60-70% | Keyword-based fallback |
+| **Resume/CV** | 65-75% | 55-65% | Keyword-based fallback |
+
+*\*Accuracy figures are preliminary and based on limited offline test datasets. Rigorous benchmarking with 100+ samples per type is planned for v1.5.*
 
 ---
 
-## 🗂️ Project Structure
+## 🔒 Security & Limitations
 
-```
-trustlens-visual-document-trust-chain/
-│
-├── app.py                    # Main Streamlit app + auth + navigation
-├── config.py                 # App version, name, URLs
-├── requirements.txt          # Python dependencies
-├── packages.txt              # System packages (tesseract, graphviz)
-│
-├── views/
-│   ├── 1_Upload_Document.py  # Universal AI upload + anchoring
-│   ├── 2_Verify_Document.py  # Public verification portal + fuzzy search
-│   └── 3_Trust_Analytics.py  # Private vault + document management
-│
-├── utils/
-│   ├── ml_classifier.py      # ⭐ 5-layer Universal AI pipeline
-│   ├── ocr_processor.py      # Tesseract OCR wrapper
-│   ├── hashing.py            # SHA-256 content fingerprinting
-│   ├── crypto_signer.py      # ECDSA key generation + signing
-│   ├── db_client.py          # Supabase PostgreSQL + Storage client
-│   └── auth.py               # Supabase Auth (login/signup/reset)
-│
-├── components/
-│   └── certificate.py        # PDF Trust Certificate generator (fpdf2)
-│
-├── models/
-│   └── document.py           # DocumentModel dataclass
-│
-└── .streamlit/
-    └── secrets.toml          # API keys (not committed to git)
-```
+This is a proof-of-concept for learning purposes. The following production-grade security measures are not yet implemented but identified as critical next steps:
+
+| Security Control | Status | Notes |
+|---|---|---|
+| **Row Level Security (RLS)** | Planned | Supabase RLS policies need to be configured so users only see their own data. |
+| **Rate Limiting** | Planned | No built-in rate limiting in Streamlit; would need FastAPI gateway. |
+| **HSM Key Storage** | Planned | ECDSA keys are generated in-memory per session; production would use AWS KMS or HashiCorp Vault. |
+| **Input Validation** | Partial | Upload file size/MIME limits implemented; needs deeper content scanning. |
+| **Audit Logging** | Not implemented | Would need immutable append-only log (e.g., AWS QLDB or blockchain). |
+| **ELA/Deepfake Detection** | Not implemented | Planned for v2.0 with OpenCV Error Level Analysis. |
+| **Hash Scope** | Partial | Prototype hashes extracted text fields. Production should hash raw image bytes alongside text. |
+
+*Why this matters: Being transparent about limitations shows an understanding of what production systems require. These gaps validate the need for the v2.0 microservices architecture.*
+
+---
+
+## 🛡️ Known Issues & Future Roadmap
+
+**v1.0 (Current):**
+- ✅ Core upload → extract → sign → verify flow
+- ✅ Basic Supabase auth and storage
+- ✅ Public verification portal
+- ⚠️ No RLS (data visible to all authenticated users)
+- ⚠️ No rate limiting
+- ⚠️ Keys in memory
+
+**v1.5 (Next):**
+- [ ] Add Supabase RLS policies
+- [ ] Implement robust input validation (file size, type, content)
+- [ ] Add basic rate limiting via Streamlit caching
+- [ ] Benchmark with 100+ samples per document type
+
+**v2.0 (Production Target):**
+- [ ] Migrate to FastAPI + Next.js architecture
+- [ ] Add OpenCV ELA for tamper detection
+- [ ] Implement Celery async workers for ML inference
+- [ ] Add AWS KMS for key management
+- [ ] Add comprehensive audit logging
+- [ ] Dockerize for reproducible deployment
 
 ---
 
@@ -255,7 +148,7 @@ Create `.streamlit/secrets.toml`:
 ```toml
 SUPABASE_URL = "your_supabase_url"
 SUPABASE_KEY = "your_supabase_anon_key"
-HF_TOKEN    = "your_huggingface_token"   # Free at huggingface.co/settings/tokens
+HF_TOKEN    = "your_huggingface_token"
 ```
 
 ### 4. Run Locally
@@ -263,103 +156,22 @@ HF_TOKEN    = "your_huggingface_token"   # Free at huggingface.co/settings/token
 streamlit run app.py
 ```
 
----
-
-## ☁️ Deploy to Streamlit Cloud
-
-1. Fork this repository
-2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. Connect your GitHub and select this repo
-4. Add secrets in the Streamlit Cloud dashboard
-5. Deploy! ✅
-
----
-
-## 🧩 Tech Stack
-
-| Layer | Technology |
-|---|---|
-| **Frontend** | Streamlit 1.36+ |
-| **Database** | Supabase (PostgreSQL) |
-| **Storage** | Supabase Storage (S3-compatible) |
-| **Auth** | Supabase Auth (JWT) |
-| **AI Classification** | YOLO11 via HuggingFace Inference API |
-| **Document VQA** | Donut (naver-clova-ix) via HuggingFace |
-| **OCR** | Tesseract 5.x + pytesseract |
-| **Cryptography** | ECDSA SECP256R1 (Python `cryptography` lib) |
-| **Hashing** | SHA-256 |
-| **PDF Generation** | fpdf2 |
-| **QR Codes** | qrcode[pil] |
-| **Trust Visualization** | Graphviz (st.graphviz_chart) |
-
----
-
-## 🔍 How Verification Works
-
-Anyone — without logging in — can verify a document at the **Public Verification Portal**:
-
-```
-Search by ANY of:
-  ✅ Full Ledger UUID     →  "4a9b7d00-1f6e-430d..."
-  ✅ Person's Name        →  "Hemanth Naidu"
-  ✅ Document Ref ID      →  "2253002" (Roll No) or "BKZPG1234H" (PAN)
-  ✅ Document Category    →  "Aadhaar Card"
-  ✅ Partial / Typo       →  Fuzzy search finds closest match (≥60% similarity)
-  ✅ Google Drive URL     →  Direct or shared link
-```
-
-The system then:
-1. **Recalculates** the SHA-256 hash from the stored extracted fields
-2. **Compares** it with the stored hash — any mismatch = tampered
-3. **Verifies** the ECDSA signature against the stored public key
-4. Shows a **🛡️ 100% AUTHENTIC** or **⚠️ TAMPER DETECTED** badge
-
----
-
-## 🏆 How TrustLens Compares to Industry
-
-| Platform | Type | Key Feature |
-|---|---|---|
-| **Veriff** | Commercial | 11,000+ doc types, 230+ countries |
-| **Onfido** | Commercial | AI fraud detection |
-| **Stripe Identity** | Commercial | Developer-first |
-| **TrustLens** | **Open Source** | **Cryptographic proof + Universal AI + Free** |
-
-> TrustLens is the **only open-source project** combining VLM-based document understanding, ECDSA cryptographic anchoring, and a public verification portal in a single deployable application.
+### ⚠️ Deployment Note
+This project is currently deployed on Streamlit Community Cloud. Free-tier apps go to "sleep" after 7 days of inactivity. If visiting the live demo, you may need to click "Wake App" and wait 2-3 minutes for the environment to boot and HuggingFace API endpoints to perform cold starts.
 
 ---
 
 ## 🤝 Contributing
-
-Contributions are welcome! Please:
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
-4. Push (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Contributions are welcome for educational purposes! Please open a Pull Request for any of the roadmap items.
 
 ---
 
 ## 📄 License
-
 Distributed under the MIT License. See `LICENSE` for more information.
 
 ---
 
 ## 👨‍💻 Author
-
 **Gokavalasa Hemanth Naidu**
 - GitHub: [@GokavalasaHemanthNaidu](https://github.com/GokavalasaHemanthNaidu)
 - Email: anthnaidu2022.18@gmail.com
-
----
-
-<div align="center">
-
-**Built with ❤️ using AI, Cryptography, and Open Source**
-
-*If this project helped you, please ⭐ star the repository!*
-
-[![GitHub stars](https://img.shields.io/github/stars/GokavalasaHemanthNaidu/TrustLens-Visual-Document-Trust-Chain?style=social)](https://github.com/GokavalasaHemanthNaidu/TrustLens-Visual-Document-Trust-Chain)
-
-</div>

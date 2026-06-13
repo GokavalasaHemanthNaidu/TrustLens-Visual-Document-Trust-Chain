@@ -72,12 +72,26 @@ processed_images = []
 
 with tab_file:
     uploaded_files = st.file_uploader(
-        "Upload document image(s):", type=["png", "jpg", "jpeg"],
+        "Upload document image(s) (Max 5MB):", type=["png", "jpg", "jpeg", "webp", "bmp", "tiff"],
         accept_multiple_files=True
     )
     if uploaded_files:
         for f in uploaded_files:
-            processed_images.append((Image.open(f), f.name, f.getvalue()))
+            if f.size > 5 * 1024 * 1024:
+                st.error(f"❌ File '{f.name}' is too large. Max 5MB allowed.")
+                continue
+            if not f.type.startswith('image/'):
+                st.error(f"❌ File '{f.name}' is not a valid image type.")
+                continue
+            try:
+                # Verify image integrity
+                img = Image.open(f)
+                img.verify()
+                f.seek(0) # Reset file pointer after verify
+                img = Image.open(f)
+                processed_images.append((img, f.name, f.getvalue()))
+            except Exception as e:
+                st.error(f"❌ File '{f.name}' is corrupted or not a valid image: {e}")
 
 with tab_link:
     url_input = st.text_input("Paste URL:", placeholder="Google Drive link or direct image URL...")
