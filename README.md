@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/TrustLens-AI%20Document%20Trust%20Chain-3B82F6?style=for-the-badge&logo=shield&logoColor=white" alt="TrustLens"/>
+<img src="https://img.shields.io/badge/TrustLens-AI%20Document%20Trust%20Chain-8A2BE2?style=for-the-badge&logo=shield&logoColor=white" alt="TrustLens"/>
 
 # 🛡️ TrustLens — Visual Document Trust Chain
 
@@ -11,7 +11,7 @@
 [![MongoDB](https://img.shields.io/badge/MongoDB-Atlas%20NoSQL-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://mongodb.com)
 [![Cloudinary](https://img.shields.io/badge/Cloudinary-Image%20Storage-3448C5?style=flat-square&logo=cloudinary&logoColor=white)](https://cloudinary.com)
 [![HuggingFace](https://img.shields.io/badge/HuggingFace-Donut%20%2B%20YOLO-FFD21E?style=flat-square&logo=huggingface&logoColor=black)](https://huggingface.co)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-9400D3.svg?style=flat-square)](LICENSE)
 
 **[🚀 Live Demo](https://trustlens-visual-document-trust-chain.streamlit.app/) · [🐛 Report Bug](https://github.com/GokavalasaHemanthNaidu/TrustLens-Visual-Document-Trust-Chain/issues)**
 
